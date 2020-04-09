@@ -6,26 +6,28 @@ import breeze.numerics.{exp, log, pow, sqrt}
 import structure.DVStructure
 
 /**
-  * Saturated model with Gibbs sampler. Implementation for asymmetric main effects and asymmetric interactions.
-  * Model: X_ijk | mu,a_j,b_k ,gamma_jk,tau  ~ N(mu + a_j + b_k + I_jk * gamma_jk , τ^−1 )
-  * Using gamma priors for taua, taub, tauTheta and Normal for the main effects a_j and b_k and the effect size theta_jk
-  * Asymmetric main effects: as and bs come from a different distribution
-  * Asymmetric Interactions: gamma_jk is different from gamma_kj
-  **/
+ * Variable selection with Horseshoe. Implementation for asymmetric main effects and asymmetric interactions.
+ * Two main effects αs and βs, and their interactions thetas
+ * Model: X_ijk | mu,a_j,b_k , tauHS, lambda_jk, theta_jk, tau  ~ N(mu + a_j + b_k + I_jk * theta_jk , τ^−1 )
+ * Using gamma priors for taua and taub, Cauchy(0,1)+ for tauHS and lambda_jk
+ * Variable selection with Horseshoe: theta_jk| tauHS, lambda_jk ~ N(0 , tauHS^2, lambda_jk^2^ )
+ * Asymmetric main effects: as and bs come from a different distribution
+ * Asymmetric Interactions: theta_jk is different from theta_kj
+ **/
 class HorseshoeAsymmetricBoth extends VariableSelection {
 
   override def variableSelection(info: InitialInfo) = {
     // Initialise case class objects
     val initmt = DenseVector[Double](0.0, 1.0)
-    val inittaus = DenseVector[Double](1.0, 1.0, 1.0)
+    val inittaus = DenseVector[Double](1.0, 1.0)
     val initAlphaCoefs = DenseVector.zeros[Double](info.alphaLevels)
     val initBetaCoefs = DenseVector.zeros[Double](info.betaLevels)
     val initZetaCoefs = DenseVector.zeros[Double](info.zetaLevels)
-    val initThetas = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels) //Thetas represent the interaction coefficients gamma for this case
-    val initIndics = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
-    val initFinals = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
+    val initGammas = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels) //Thetas represent the interaction coefficients gamma for this case
+    val initLambdas = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
+    val initTauHS = 0.0
 
-    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initThetas, initIndics, initFinals, initmt, inittaus)
+    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus)
     calculateAllStates(info.noOfIter, info, fullStateInit)
   }
 
@@ -35,10 +37,10 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   override def nextmutau(oldfullState: FullState, info: InitialInfo): FullState = {
     val prevtau = oldfullState.mt(1)
     val varMu = 1.0 / (info.tau0 + info.N * prevtau) //the variance for mu
-    val meanMu = (info.mu0 * info.tau0 + prevtau * (info.SumObs - sumAllMainInterEff(info.structure, oldfullState.acoefs, oldfullState.bcoefs, oldfullState.thcoefs))) * varMu
+    val meanMu = (info.mu0 * info.tau0 + prevtau * (info.SumObs - sumAllMainInterEff(info.structure, oldfullState.acoefs, oldfullState.bcoefs, oldfullState.gammaCoefs))) * varMu
     val newmu = breeze.stats.distributions.Gaussian(meanMu, sqrt(varMu)).draw()
     //Use the just updated mu to estimate tau
-    val newtau = breeze.stats.distributions.Gamma(info.a + info.N / 2.0, 1.0 / (info.b + 0.5 * YminusMuAndEffects(info.structure, newmu, oldfullState.acoefs, oldfullState.bcoefs, oldfullState.thcoefs))).draw() //  !!!!TO SAMPLE FROM THE GAMMA DISTRIBUTION IN BREEZE THE β IS 1/β
+    val newtau = breeze.stats.distributions.Gamma(info.a + info.N / 2.0, 1.0 / (info.b + 0.5 * YminusMuAndEffects(info.structure, newmu, oldfullState.acoefs, oldfullState.bcoefs, oldfullState.gammaCoefs))).draw() //  !!!!TO SAMPLE FROM THE GAMMA DISTRIBUTION IN BREEZE THE β IS 1/β
     oldfullState.copy(mt = DenseVector(newmu, newtau))
   }
 
@@ -61,16 +63,15 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     sumbk -= (info.betaLevels - info.betaLevelsDist) * pow(0 - info.betaPriorMean, 2) //For the missing effects (if any) added extra in the sum above
 
     var sumThetajk = 0.0
-    oldfullState.thcoefs.foreachValue(thcoef => {
-      sumThetajk += pow(thcoef - info.thetaPriorMean, 2) // Sum used in sampling from Gamma distribution for the precision of theta/interacions
+    oldfullState.gammaCoefs.foreachValue(gcoeff => {
+      sumThetajk += pow(gcoeff - info.gammaPriorMean, 2) // Sum used in sampling from Gamma distribution for the precision of theta/interacions
     })
     sumThetajk -= (info.alphaLevels * info.betaLevels - njk) * pow(0 - info.betaPriorMean, 2) //For the missing effects (if any) added extra in the sum above
 
     val newtauAlpha = breeze.stats.distributions.Gamma(info.aPrior + info.alphaLevelsDist / 2.0, 1.0 / (info.bPrior + 0.5 * sumaj)).draw() //sample the precision of alpha from gamma
     val newtauBeta = breeze.stats.distributions.Gamma(info.aPrior + info.betaLevelsDist / 2.0, 1.0 / (info.bPrior + 0.5 * sumbk)).draw() // sample the precision of beta from gamma
-    val newtauTheta = breeze.stats.distributions.Gamma(info.aPrior + njk / 2.0, 1.0 /(info.bPrior + 0.5 * sumThetajk)).draw() // sample the precision of the interactions gamma from gamma Distribition
 
-    oldfullState.copy(tauabth = DenseVector(newtauAlpha, newtauBeta, newtauTheta))
+    oldfullState.copy(tauab = DenseVector(newtauAlpha, newtauBeta))
   }
 
   override def nextCoefs(oldfullState: FullState, info: InitialInfo): FullState = {
@@ -89,9 +90,9 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
       val SXalphaj = info.structure.calcAlphaSum(j) // the sum of the observations that have alpha==j
       val Nj = info.structure.calcAlphaLength(j) // the number of the observations that have alpha==j
       val SumBeta = sumBetaEffGivenAlpha(info.structure, j, oldfullState.bcoefs) //the sum of the beta effects given alpha
-      val SinterAlpha = sumInterEffGivenAlpha(info.structure, j, oldfullState.thcoefs) //the sum of the gamma effects given alpha
-      val varPalpha = 1.0 / (oldfullState.tauabth(0) + oldfullState.mt(1) * Nj) //the variance for alphaj
-      val meanPalpha = (info.alphaPriorMean * oldfullState.tauabth(0) + oldfullState.mt(1) * (SXalphaj - Nj * oldfullState.mt(0) - SumBeta - SinterAlpha)) * varPalpha //the mean for alphaj
+      val SinterAlpha = sumInterEffGivenAlpha(info.structure, j, oldfullState.gammaCoefs) //the sum of the gamma effects given alpha
+      val varPalpha = 1.0 / (oldfullState.tauab(0) + oldfullState.mt(1) * Nj) //the variance for alphaj
+      val meanPalpha = (info.alphaPriorMean * oldfullState.tauab(0) + oldfullState.mt(1) * (SXalphaj - Nj * oldfullState.mt(0) - SumBeta - SinterAlpha)) * varPalpha //the mean for alphaj
       curAlphaEstim(j) = breeze.stats.distributions.Gaussian(meanPalpha, sqrt(varPalpha)).draw()
     })
     oldfullState.copy(acoefs = curAlphaEstim)
@@ -108,9 +109,9 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
       val SXbetak = info.structure.calcBetaSum(k) // the sum of the observations that have beta==k
       val Nk = info.structure.calcBetaLength(k) // the number of the observations that have beta==k
       val SumAlpha = sumAlphaGivenBeta(info.structure, k, oldfullState.acoefs) //the sum of the alpha effects given beta
-      val SinterBeta = sumInterEffGivenBeta(info.structure, k, oldfullState.thcoefs) //the sum of the gamma/interaction effects given beta
-      val varPbeta = 1.0 / (oldfullState.tauabth(1) + oldfullState.mt(1) * Nk) //the variance for betak
-      val meanPbeta = (info.betaPriorMean * oldfullState.tauabth(1) + oldfullState.mt(1) * (SXbetak - Nk * oldfullState.mt(0) - SumAlpha - SinterBeta)) * varPbeta //the mean for betak
+      val SinterBeta = sumInterEffGivenBeta(info.structure, k, oldfullState.gammaCoefs) //the sum of the gamma/interaction effects given beta
+      val varPbeta = 1.0 / (oldfullState.tauab(1) + oldfullState.mt(1) * Nk) //the variance for betak
+      val meanPbeta = (info.betaPriorMean * oldfullState.tauab(1) + oldfullState.mt(1) * (SXbetak - Nk * oldfullState.mt(0) - SumAlpha - SinterBeta)) * varPbeta //the mean for betak
       curBetaEstim(k) = breeze.stats.distributions.Gaussian(meanPbeta, sqrt(varPbeta)).draw()
     })
     oldfullState.copy(bcoefs = curBetaEstim)
@@ -120,17 +121,29 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     * Function for updating interaction coefficients
     */
   override def nextIndicsInters(oldfullState: FullState, info: InitialInfo): FullState = {
-    val curThetaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
+    val curGammaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
+    val curLambdaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
+    // Sample tauHS here bcs it is common for all
+    val curTauHS = 1.0
 
     info.structure.foreach(item => {
+      // Update lambda_jk
+      //1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
+
+      //2. Find the ratio r using the normalising constant too. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
+
+      //3. Compare r with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
+
+      // update gamma_jk
       val Njk = item.list.length // the number of the observations that have alpha==j and beta==k
       val SXjk = item.list.sum // the sum of the observations that have alpha==j and beta==k
-
-      val varPInter = 1.0 / (oldfullState.tauabth(2) + oldfullState.mt(1) * Njk) //the variance for gammajk
-      val meanPInter = (info.thetaPriorMean * oldfullState.tauabth(2) + oldfullState.mt(1) * (SXjk - Njk * (oldfullState.mt(0) + oldfullState.acoefs(item.a) + oldfullState.bcoefs(item.b)))) * varPInter
-      curThetaEstim(item.a, item.b) = breeze.stats.distributions.Gaussian(meanPInter, sqrt(varPInter)).draw()
+      val sigmaInter = curLambdaEstim(item.a, item.b) * curTauHS //the variance for gammajk
+      val varInter = pow(sigmaInter,2)
+      val precInter = 1/varInter
+      val meanPInter = (info.gammaPriorMean * precInter + oldfullState.mt(1) * (SXjk - Njk * (oldfullState.mt(0) + oldfullState.acoefs(item.a) + oldfullState.bcoefs(item.b)))) * varInter
+      curGammaEstim(item.a, item.b) = breeze.stats.distributions.Gaussian(meanPInter, sqrt(varInter)).draw()
     })
-    oldfullState.copy(thcoefs = curThetaEstim)
+    oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS)
   }
 
   /**
@@ -239,13 +252,13 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
         .append(",")
         .append(fullstate.mt(1).toString)
         .append(",")
-        .append( fullstate.tauabth.toArray.map { tau => tau.toString }.mkString(",") )
+        .append( fullstate.tauab.toArray.map { tau => tau.toString }.mkString(",") )
         .append(",")
         .append( fullstate.acoefs.toArray.map { alpha => alpha.toString }.mkString(",") )
         .append(",")
         .append( fullstate.bcoefs.toArray.map { beta => beta.toString }.mkString(",") )
         .append(",")
-        .append( fullstate.thcoefs.toArray.map { theta => theta.toString }.mkString(",") )
+        .append( fullstate.gammaCoefs.toArray.map { theta => theta.toString }.mkString(",") )
         .append("\n")
     }
     pw.close()
