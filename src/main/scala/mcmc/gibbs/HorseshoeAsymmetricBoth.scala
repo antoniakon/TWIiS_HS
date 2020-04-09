@@ -2,7 +2,7 @@ package mcmc.gibbs
 
 import java.io.{File, FileWriter, PrintWriter}
 import breeze.linalg.{*, DenseMatrix, DenseVector, max}
-import breeze.numerics.{exp, log, pow, sqrt}
+import breeze.numerics.{pow, sqrt, erf, exp}
 import structure.DVStructure
 
 /**
@@ -129,8 +129,27 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     info.structure.foreach(item => {
       // Update lambda_jk
       //1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
+      val curLambda = oldfullState.lambdas(item.a, item.b)
+      val curGamma = oldfullState.gammaCoefs(item.a, item.b)
+      val stepSize = 5
+      var lambdaStar = 0.0
 
-      //2. Find the ratio r using the normalising constant too. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
+      do{
+        lambdaStar = breeze.stats.distributions.Gaussian(curGamma, sqrt(stepSize)).draw()
+      }
+      while(lambdaStar<0)
+
+      val curLambdaSQR = pow(curLambda, 2)
+      val lambdaStarSQR = pow(lambdaStar, 2)
+      val tauHSSQR = pow(curTauHS, 2)
+
+      /**
+       * Computes the cumulative density function of the value x as: = 0.5 * (1 + erf((x - mu) / (sqrt(2.0) * sigma)))
+       */
+      def standardNormalcdf(x: Double) = 0.5 * (1 + erf(x / sqrt(2.0)))
+
+      //2. Find the acceptance ratio A using the normalising constant too. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
+      val A = ((curLambdaSQR + 1) * curLambda / (lambdaStarSQR + 1) * lambdaStar) * exp(pow(curGamma, 2) * ((1/curLambdaSQR * tauHSSQR) - (1/lambdaStarSQR * tauHSSQR))* 0.5) * standardNormalcdf(curLambda) / standardNormalcdf(lambdaStar)
 
       //3. Compare r with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
 
