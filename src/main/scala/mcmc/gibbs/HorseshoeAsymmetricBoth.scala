@@ -24,7 +24,7 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     val initBetaCoefs = DenseVector.zeros[Double](info.betaLevels)
     val initZetaCoefs = DenseVector.zeros[Double](info.zetaLevels)
     val initGammas = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels) //Thetas represent the interaction coefficients gamma for this case
-    val initLambdas = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
+    val initLambdas = DenseMatrix.ones[Double](info.alphaLevels, info.betaLevels)
     val initTauHS = 0.0
 
     val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus)
@@ -129,17 +129,17 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     info.structure.foreach(item => {
       // Update lambda_jk
       //1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
-      val curLambda = oldfullState.lambdas(item.a, item.b)
+      val oldLambda = oldfullState.lambdas(item.a, item.b)
       val curGamma = oldfullState.gammaCoefs(item.a, item.b)
       val stepSize = 5
       var lambdaStar = 0.0
 
       do{
-        lambdaStar = breeze.stats.distributions.Gaussian(curGamma, sqrt(stepSize)).draw()
+        lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, sqrt(stepSize)).draw()
       }
       while(lambdaStar<0)
 
-      val curLambdaSQR = pow(curLambda, 2)
+      val curLambdaSQR = pow(oldLambda, 2)
       val lambdaStarSQR = pow(lambdaStar, 2)
       val tauHSSQR = pow(curTauHS, 2)
 
@@ -149,9 +149,15 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
       def standardNormalcdf(x: Double) = 0.5 * (1 + erf(x / sqrt(2.0)))
 
       //2. Find the acceptance ratio A using the normalising constant too. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
-      val A = ((curLambdaSQR + 1) * curLambda / (lambdaStarSQR + 1) * lambdaStar) * exp(pow(curGamma, 2) * ((1/curLambdaSQR * tauHSSQR) - (1/lambdaStarSQR * tauHSSQR))* 0.5) * standardNormalcdf(curLambda) / standardNormalcdf(lambdaStar)
+      val A = ((curLambdaSQR + 1) * oldLambda / (lambdaStarSQR + 1) * lambdaStar) * exp(pow(curGamma, 2) * ((1/curLambdaSQR * tauHSSQR) - (1/lambdaStarSQR * tauHSSQR))* 0.5) * standardNormalcdf(oldLambda) / standardNormalcdf(lambdaStar)
 
-      //3. Compare r with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
+      //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
+      val u = breeze.stats.distributions.Uniform(0, 1).draw()
+      if(A > u){
+        curLambdaEstim(item.a, item.b) = lambdaStar
+      } else{
+        curLambdaEstim(item.a, item.b) = oldLambda
+      }
 
       // update gamma_jk
       val Njk = item.list.length // the number of the observations that have alpha==j and beta==k
@@ -162,6 +168,8 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
       val meanPInter = (info.gammaPriorMean * precInter + oldfullState.mt(1) * (SXjk - Njk * (oldfullState.mt(0) + oldfullState.acoefs(item.a) + oldfullState.bcoefs(item.b)))) * varInter
       curGammaEstim(item.a, item.b) = breeze.stats.distributions.Gaussian(meanPInter, sqrt(varInter)).draw()
     })
+
+    println(curGammaEstim)
     oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS)
   }
 
