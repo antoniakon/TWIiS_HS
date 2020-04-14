@@ -18,7 +18,7 @@ abstract class VariableSelection {
   protected final def calculateAllStates(n:Int, info: InitialInfo, fstate:FullState) = {
     //with recursion
 //    calculateNewState(n, info, fstate, FullStateList(List(fstate)))
-
+    val njk = info.structure.sizeOfStructure() // Number of levels of interactions
     printTitlesToFile(info)
 
     //Burn-in period
@@ -45,9 +45,14 @@ abstract class VariableSelection {
       //now write this buffer
       executor.execute { () => printToFile(toWrite) }
 
+      if(remainingIterations < 0){
+        val ar = lastState.count/(njk * (info.noOfIter + info.burnIn))
+        println("acceptance rate")
+        println(ar)
+
+      }
     }
     executor.shutdown()
-
   }
 
   protected def printTitlesToFile(initialInfo: InitialInfo): Unit

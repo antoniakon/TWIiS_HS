@@ -15,7 +15,6 @@ import structure.DVStructure
  * Asymmetric Interactions: theta_jk is different from theta_kj
  **/
 class HorseshoeAsymmetricBoth extends VariableSelection {
-
   override def variableSelection(info: InitialInfo) = {
     // Initialise case class objects
     val initmt = DenseVector[Double](0.0, 1.0)
@@ -26,8 +25,9 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     val initGammas = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels) //Thetas represent the interaction coefficients gamma for this case
     val initLambdas = DenseMatrix.ones[Double](info.alphaLevels, info.betaLevels)
     val initTauHS = 0.0
+    val acceptanceCount = 0.0
 
-    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus)
+    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, acceptanceCount)
     calculateAllStates(info.noOfIter, info, fullStateInit)
   }
 
@@ -124,53 +124,58 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     val curGammaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
     val curLambdaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
     // Sample tauHS here bcs it is common for all
+    // val curTauHS = oldfullState.tauHS
     val curTauHS = 1.0
+    var inIterCount = oldfullState.count
 
     info.structure.foreach(item => {
       // Update lambda_jk
       //1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
       val oldLambda = oldfullState.lambdas(item.a, item.b)
       val curGamma = oldfullState.gammaCoefs(item.a, item.b)
-      val stepSize = 5
+      val stepSize = 0.05
       var lambdaStar = 0.0
 
-      do{
-        lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, sqrt(stepSize)).draw()
-      }
-      while(lambdaStar<0)
+      println(s"new item :" + item.a + s"-" +item.b)
+      println(oldLambda)
+      lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSize).draw()
+      println(lambdaStar)
 
-      val curLambdaSQR = pow(oldLambda, 2)
-      val lambdaStarSQR = pow(lambdaStar, 2)
-      val tauHSSQR = pow(curTauHS, 2)
-
-      /**
-       * Computes the cumulative density function of the value x as: = 0.5 * (1 + erf((x - mu) / (sqrt(2.0) * sigma)))
-       */
-      def standardNormalcdf(x: Double) = 0.5 * (1 + erf(x / sqrt(2.0)))
-
-      //2. Find the acceptance ratio A using the normalising constant too. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
-      val A = ((curLambdaSQR + 1) * oldLambda / (lambdaStarSQR + 1) * lambdaStar) * exp(pow(curGamma, 2) * ((1/curLambdaSQR * tauHSSQR) - (1/lambdaStarSQR * tauHSSQR))* 0.5) * standardNormalcdf(oldLambda) / standardNormalcdf(lambdaStar)
-
-      //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
-      val u = breeze.stats.distributions.Uniform(0, 1).draw()
-      if(A > u){
-        curLambdaEstim(item.a, item.b) = lambdaStar
-      } else{
+      // Reject lambdaStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
+      if(lambdaStar < 0){
         curLambdaEstim(item.a, item.b) = oldLambda
+        println("In here")
+      }
+      else {
+        val oldLambdaSQR = scala.math.pow(oldLambda, 2)
+        val lambdaStarSQR = scala.math.pow(lambdaStar, 2)
+        val tauHSSQR = scala.math.pow(curTauHS, 2)
+
+        //2. Find the acceptance ratio A
+        val A = ((oldLambdaSQR + 1) * oldLambda / (lambdaStarSQR + 1) * lambdaStar) * exp(scala.math.pow(curGamma, 2) * ((1/(oldLambdaSQR * tauHSSQR)) - (1/(lambdaStarSQR * tauHSSQR))) * 0.5)
+        //println(A)
+        //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
+        val u = breeze.stats.distributions.Uniform(0, 1).draw()
+        if(A > u){
+          curLambdaEstim(item.a, item.b) = lambdaStar
+          inIterCount += 1
+        } else{
+          curLambdaEstim(item.a, item.b) = oldLambda
+          println("reject")
+        }
       }
 
       // update gamma_jk
       val Njk = item.list.length // the number of the observations that have alpha==j and beta==k
       val SXjk = item.list.sum // the sum of the observations that have alpha==j and beta==k
-      val sigmaInter = curLambdaEstim(item.a, item.b) * curTauHS //the variance for gammajk
-      val varInter = pow(sigmaInter,2)
-      val precInter = 1/varInter
-      val meanPInter = (info.gammaPriorMean * precInter + oldfullState.mt(1) * (SXjk - Njk * (oldfullState.mt(0) + oldfullState.acoefs(item.a) + oldfullState.bcoefs(item.b)))) * varInter
+      val tauGammajk = 1.0 / scala.math.pow(curLambdaEstim(item.a, item.b) * curTauHS, 2)
+      val varInter = 1.0 / (tauGammajk + oldfullState.mt(1) * Njk) //the variance for gammajk
+      val meanPInter = (info.gammaPriorMean * tauGammajk + oldfullState.mt(1) * (SXjk - Njk * (oldfullState.mt(0) + oldfullState.acoefs(item.a) + oldfullState.bcoefs(item.b)))) * varInter
       curGammaEstim(item.a, item.b) = breeze.stats.distributions.Gaussian(meanPInter, sqrt(varInter)).draw()
     })
 
     println(curGammaEstim)
-    oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS)
+    oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, count = inIterCount)
   }
 
   /**
