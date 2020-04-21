@@ -3,7 +3,7 @@ package mcmc.gibbs
 import breeze.linalg.{*, DenseMatrix, DenseVector}
 import structure.DVStructure
 
-case class FullState(acoefs: DenseVector[Double], bcoefs: DenseVector[Double], zcoefs: DenseVector[Double], gammaCoefs: DenseMatrix[Double], lambdas: DenseMatrix[Double], tauHS: Double, mt: DenseVector[Double], tauab: DenseVector[Double])
+case class FullState(acoefs: DenseVector[Double], bcoefs: DenseVector[Double], zcoefs: DenseVector[Double], gammaCoefs: DenseMatrix[Double], lambdas: DenseMatrix[Double], tauHS: Double, mt: DenseVector[Double], tauab: DenseVector[Double], count: Double)
 
 case class FullStateList(fstateL: Vector[FullState])
 

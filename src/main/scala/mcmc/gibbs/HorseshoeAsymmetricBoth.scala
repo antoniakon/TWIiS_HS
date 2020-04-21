@@ -1,9 +1,12 @@
 package mcmc.gibbs
 
 import java.io.{File, FileWriter, PrintWriter}
-import breeze.linalg.{*, DenseMatrix, DenseVector, max}
-import breeze.numerics.{pow, sqrt, erf, exp}
+
+import breeze.linalg.{*, DenseMatrix, DenseVector, max, sum}
+import breeze.numerics.{erf, exp, pow, sqrt}
 import structure.DVStructure
+
+import scala.math.{log}
 
 /**
  * Variable selection with Horseshoe. Implementation for asymmetric main effects and asymmetric interactions.
@@ -24,7 +27,7 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     val initZetaCoefs = DenseVector.zeros[Double](info.zetaLevels)
     val initGammas = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels) //Thetas represent the interaction coefficients gamma for this case
     val initLambdas = DenseMatrix.ones[Double](info.alphaLevels, info.betaLevels)
-    val initTauHS = 0.0
+    val initTauHS = 1.0
     val acceptanceCount = 0.0
 
     val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, acceptanceCount)
@@ -118,15 +121,61 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   }
 
   /**
-    * Function for updating interaction coefficients
-    */
+   * Function for updating interaction coefficients
+   */
   override def nextIndicsInters(oldfullState: FullState, info: InitialInfo): FullState = {
     val curGammaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
     val curLambdaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
+    var curTauHS = 0.0
+    val njk = info.structure.sizeOfStructure() //no of interactions
+    // val curTauHS = 1.0 //keep the tauHS const to 1 gives correct results
+    var inIterCount = oldfullState.count //counter for the times the proposed value is accepted
+
     // Sample tauHS here bcs it is common for all
-    // val curTauHS = oldfullState.tauHS
-    val curTauHS = 1.0
-    var inIterCount = oldfullState.count
+    val oldTauHS = oldfullState.tauHS
+    val stepSizeTauHS = 0.5
+
+    // 1. Use the proposal N(prevTauHS, stepSize) to propose a new location tauHS* (if value sampled <0 propose again until >0)
+    val tauHSStar = breeze.stats.distributions.Gaussian(oldTauHS, stepSizeTauHS).draw()
+
+    // Reject tauHSStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
+    if(tauHSStar < 0){
+      curTauHS = oldTauHS
+    }
+    else {
+      val oldTauHSSQR = scala.math.pow(oldTauHS, 2)
+      val tauHSStarSQR = scala.math.pow(tauHSStar, 2)
+
+      /**
+       * Function for estimating the sqr of two matrices, do elementwise division if the denominator is not 0 and calculate the sum
+       */
+      def elementwiseDivisionSQRSum(a: DenseMatrix[Double], b: DenseMatrix[Double]): Double = {
+        var sum = 0.0
+        val aSQR = a.map(x => scala.math.pow(x, 2))
+        val bSQR = b.map(x => scala.math.pow(x, 2))
+        for (i <- 0 until info.alphaLevels){
+          for (j <- 0 until info.betaLevels){
+            if(bSQR(i,j) != 0){
+              sum += aSQR(i,j) / bSQR(i,j)
+            }
+          }
+        }
+        sum
+      }
+
+      //2. Find the acceptance ratio A. Using the log is better and less prone to errors due to overflows.
+      val A = log(oldTauHSSQR + 1) + njk * log(oldTauHS) - log(tauHSStarSQR + 1) - njk * log(tauHSStar) + 0.5 * elementwiseDivisionSQRSum(oldfullState.gammaCoefs, oldfullState.lambdas) * ((1/oldTauHSSQR) - (1/tauHSStarSQR))
+
+      //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
+      val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
+
+      if(A > u){
+        curTauHS = tauHSStar
+        inIterCount += 1
+      } else{
+        curTauHS = oldTauHS
+      }
+    }
 
     info.structure.foreach(item => {
       // Update lambda_jk
@@ -153,12 +202,13 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
         //println(A)
         //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
         val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
+
         if(A > u){
           curLambdaEstim(item.a, item.b) = lambdaStar
-          inIterCount += 1
+          //inIterCount += 1
         } else{
           curLambdaEstim(item.a, item.b) = oldLambda
-          println("reject")
+          //println("reject")
         }
       }
 
@@ -171,7 +221,7 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
       curGammaEstim(item.a, item.b) = breeze.stats.distributions.Gaussian(meanPInter, sqrt(varInter)).draw()
     })
 
-    println(curGammaEstim)
+    //println(curGammaEstim)
     oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, count = inIterCount)
   }
 
@@ -261,7 +311,7 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
         (1 to info.alphaLevels).map { i => "theta".concat(i.toString).concat(entry) }.mkString(",")
       }.mkString(",")
 
-    pw.append("mu ,tau, taua, taub, tauInt,")
+    pw.append("mu ,tau, taua, taub,")
       .append( (1 to info.alphaLevels).map { i => "alpha".concat(i.toString) }.mkString(",") )
       .append(",")
       .append( (1 to info.betaLevels).map { i => "beta".concat(i.toString) }.mkString(",") )
