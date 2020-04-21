@@ -130,32 +130,29 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
 
     info.structure.foreach(item => {
       // Update lambda_jk
-      //1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
+      // 1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
       val oldLambda = oldfullState.lambdas(item.a, item.b)
       val curGamma = oldfullState.gammaCoefs(item.a, item.b)
-      val stepSize = 0.05
-      var lambdaStar = 0.0
+      val stepSizeLambda = 2.5 //sigma
 
-      println(s"new item :" + item.a + s"-" +item.b)
-      println(oldLambda)
-      lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSize).draw()
-      println(lambdaStar)
+      val lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSizeLambda).draw()
 
       // Reject lambdaStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
       if(lambdaStar < 0){
         curLambdaEstim(item.a, item.b) = oldLambda
-        println("In here")
+        //println("In here")
       }
       else {
         val oldLambdaSQR = scala.math.pow(oldLambda, 2)
         val lambdaStarSQR = scala.math.pow(lambdaStar, 2)
         val tauHSSQR = scala.math.pow(curTauHS, 2)
 
-        //2. Find the acceptance ratio A
-        val A = ((oldLambdaSQR + 1) * oldLambda / (lambdaStarSQR + 1) * lambdaStar) * exp(scala.math.pow(curGamma, 2) * ((1/(oldLambdaSQR * tauHSSQR)) - (1/(lambdaStarSQR * tauHSSQR))) * 0.5)
+        //2. Find the acceptance ratio A. Using the log is better and less prone to errors.
+        //val A = ((oldLambdaSQR + 1.0) * oldLambda / (lambdaStarSQR + 1.0) * lambdaStar) * exp((scala.math.pow(curGamma, 2)/(2.0 * tauHSSQR)) * ((1/oldLambdaSQR) - (1/lambdaStarSQR)))
+        val A = log(oldLambdaSQR + 1) + log(oldLambda) - log(lambdaStarSQR) - log(lambdaStar) + (scala.math.pow(curGamma, 2)/(2.0 * tauHSSQR)) * ((1/oldLambdaSQR) - (1/lambdaStarSQR))
         //println(A)
         //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
-        val u = breeze.stats.distributions.Uniform(0, 1).draw()
+        val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
         if(A > u){
           curLambdaEstim(item.a, item.b) = lambdaStar
           inIterCount += 1
