@@ -18,6 +18,7 @@ import scala.math.{log}
  * Asymmetric Interactions: theta_jk is different from theta_kj
  **/
 class HorseshoeAsymmetricBoth extends VariableSelection {
+  var iterationCount = 0
   override def variableSelection(info: InitialInfo) = {
     // Initialise case class objects
     val initmt = DenseVector[Double](0.0, 1.0)
@@ -29,14 +30,15 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     val initLambdas = DenseMatrix.ones[Double](info.alphaLevels, info.betaLevels)
     val initTauHS = 1.0
     val acceptanceCount = 0.0
+    val lambdaTunPar = 0.0
 
-    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, acceptanceCount)
+    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, acceptanceCount, lambdaTunPar)
     calculateAllStates(info.noOfIter, info, fullStateInit)
   }
 
   /**
-    * Function for updating mu and tau
-    */
+   * Function for updating mu and tau
+   */
   override def nextmutau(oldfullState: FullState, info: InitialInfo): FullState = {
     val prevtau = oldfullState.mt(1)
     val varMu = 1.0 / (info.tau0 + info.N * prevtau) //the variance for mu
@@ -48,8 +50,8 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   }
 
   /**
-    * Function for updating taus (taua, taub, tauInt)
-    */
+   * Function for updating taus (taua, taub, tauInt)
+   */
   override def nexttaus(oldfullState: FullState, info: InitialInfo): FullState = {
     val njk = info.structure.sizeOfStructure() // Number of levels of interactions
 
@@ -83,8 +85,8 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   }
 
   /**
-    * Function for updating alpha coefficients
-    */
+   * Function for updating alpha coefficients
+   */
   def nextAlphaCoefs(oldfullState: FullState, info: InitialInfo): FullState = {
     val curAlphaEstim = DenseVector.zeros[Double](info.alphaLevels)
 
@@ -102,8 +104,8 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   }
 
   /**
-    * Function for updating beta coefficients
-    */
+   * Function for updating beta coefficients
+   */
   def nextBetaCoefs(oldfullState: FullState, info: InitialInfo): FullState = {
     val curBetaEstim = DenseVector.zeros[Double](info.betaLevels)
 
@@ -123,14 +125,15 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   /**
    * Function for updating interaction coefficients
    */
-  override def nextIndicsInters(oldfullState: FullState, info: InitialInfo): FullState = {
+  override def nextIndicsInters(oldfullState: FullState, info: InitialInfo, inBurnIn: Boolean): FullState = {
     val curGammaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
     val curLambdaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
+    var lsiLambda = 0.0
     var curTauHS = 0.0
     val njk = info.structure.sizeOfStructure() //no of interactions
     // val curTauHS = 1.0 //keep the tauHS const to 1 gives correct results
-    var inIterCount = oldfullState.count //counter for the times the proposed value is accepted
-
+    var acceptedCountLambda = oldfullState.lambdaCount //counter for the times the proposed value is accepted
+    iterationCount += 1
     // Sample tauHS here bcs it is common for all
     val oldTauHS = oldfullState.tauHS
     val stepSizeTauHS = 0.5
@@ -171,18 +174,44 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
 
       if(A > u){
         curTauHS = tauHSStar
-        inIterCount += 1
       } else{
         curTauHS = oldTauHS
       }
     }
+
+    val stepSizeLambda = if (inBurnIn){
+      //Estimate them here
+      if(iterationCount % 50 == 0){
+        val n = iterationCount/50
+        val deltan = scala.math.min(0.01, 1/sqrt(n))
+        println(s"deltan: " + deltan)
+        val accFrac = acceptedCountLambda/(50 * info.structure.sizeOfStructure())
+        println(s"accFrac: " + accFrac)
+        acceptedCountLambda = 0
+        if(accFrac > 0.44){
+          lsiLambda = oldfullState.lambdaTuningPar + deltan
+        }else{
+          lsiLambda = oldfullState.lambdaTuningPar - deltan
+        }
+        println(s"variance: " + exp(lsiLambda))
+        exp(lsiLambda)
+      } else{
+        lsiLambda = oldfullState.lambdaTuningPar
+        exp(lsiLambda)
+      }
+    }else{ //if not in burnin
+      lsiLambda = oldfullState.lambdaTuningPar
+      exp(lsiLambda)
+    }
+
+    println(s"stepSizeLambda", stepSizeLambda)
 
     info.structure.foreach(item => {
       // Update lambda_jk
       // 1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
       val oldLambda = oldfullState.lambdas(item.a, item.b)
       val curGamma = oldfullState.gammaCoefs(item.a, item.b)
-      val stepSizeLambda = 2.5 //sigma
+      //val stepSizeLambda = 2.5 //sigma
 
       val lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSizeLambda).draw()
 
@@ -205,7 +234,10 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
 
         if(A > u){
           curLambdaEstim(item.a, item.b) = lambdaStar
-          //inIterCount += 1
+          //acceptedCountLambda += 1
+          if(inBurnIn){
+            acceptedCountLambda += 1
+          }
         } else{
           curLambdaEstim(item.a, item.b) = oldLambda
           //println("reject")
@@ -222,12 +254,12 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     })
 
     //println(curGammaEstim)
-    oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, count = inIterCount)
+    oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, lambdaCount = acceptedCountLambda, lambdaTuningPar = lsiLambda)
   }
 
   /**
-    * Add all the beta effects for a given alpha.
-    */
+   * Add all the beta effects for a given alpha.
+   */
   def sumBetaEffGivenAlpha(structure: DVStructure, alphaIndex: Int, betaEff: DenseVector[Double]): Double = {
     var sum = 0.0
     structure.getAllItemsForGivenA(alphaIndex).foreach(item => {
@@ -237,8 +269,8 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   }
 
   /**
-    * Add all the alpha effects for a given beta.
-    */
+   * Add all the alpha effects for a given beta.
+   */
   def sumAlphaGivenBeta(structure: DVStructure, betaIndex: Int, alphaEff: DenseVector[Double]): Double = {
     var sum = 0.0
     structure.getAllItemsForGivenB(betaIndex).foreach(item => {
@@ -248,8 +280,8 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   }
 
   /**
-    * Calculate the sum of all the alpha and all the beta effects for all the observations.
-    */
+   * Calculate the sum of all the alpha and all the beta effects for all the observations.
+   */
   def sumAllMainInterEff(structure: DVStructure, alphaEff: DenseVector[Double], betaEff: DenseVector[Double], interEff: DenseMatrix[Double]): Double = {
     var totalsum = 0.0
     structure.foreach(item => {
@@ -259,8 +291,8 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   }
 
   /**
-    * Add all the interaction effects for a given alpha.
-    */
+   * Add all the interaction effects for a given alpha.
+   */
   def sumInterEffGivenAlpha(structure: DVStructure, alphaIndex: Int, interEff: DenseMatrix[Double]): Double = {
     var sum = 0.0
     structure.getAllItemsForGivenA(alphaIndex).foreach(item => {
@@ -270,8 +302,8 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   }
 
   /**
-    * Add all the interaction effects for a given beta.
-    */
+   * Add all the interaction effects for a given beta.
+   */
   def sumInterEffGivenBeta(structure: DVStructure, betaIndex: Int, interEff: DenseMatrix[Double]): Double = {
     var sum = 0.0
     structure.getAllItemsForGivenB(betaIndex).foreach(item => {
@@ -281,8 +313,8 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
   }
 
   /**
-    * Calculate the Yi-mu-u_eff-n_eff- inter_effe. To be used in estimating tau
-    */
+   * Calculate the Yi-mu-u_eff-n_eff- inter_effe. To be used in estimating tau
+   */
   def YminusMuAndEffects(structure: DVStructure, mu: Double, alphaEff: DenseVector[Double], betaEff: DenseVector[Double], interEff: DenseMatrix[Double]): Double = {
     var sum = 0.0
 
@@ -298,9 +330,9 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
 
   override def getInputFilePath(): String = getFilesDirectory.concat("/simulInterAsymmetricBoth.csv")
 
-  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/ScalaRuntime1m10x15AsymmetricBothHorseshoe.txt")
+  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/ScalaRuntime10m10x15AsymmetricBothHorseshoeTRY.txt")
 
-  override def getOutputFilePath(): String = getFilesDirectory.concat("/Scala1mAsymBothHorseshoe10x15.csv")
+  override def getOutputFilePath(): String = getFilesDirectory.concat("/Scala10mAsymBothHorseshoe10x15TRY.csv")
 
   override def printTitlesToFile(info: InitialInfo): Unit = {
     val pw = new PrintWriter(new File(getOutputFilePath))

@@ -12,7 +12,7 @@ abstract class VariableSelection {
   protected def nextmutau(oldfullState: FullState, info: InitialInfo): FullState
   protected def nexttaus(oldfullState: FullState, info: InitialInfo):FullState
   protected def nextCoefs(oldfullState: FullState, info: InitialInfo):FullState
-  protected def nextIndicsInters(oldfullState: FullState, info: InitialInfo):FullState
+  protected def nextIndicsInters(oldfullState: FullState, info: InitialInfo, inBurnIn: Boolean):FullState
   private val executor = Executors.newSingleThreadExecutor()
 
   protected final def calculateAllStates(n:Int, info: InitialInfo, fstate:FullState) = {
@@ -22,7 +22,7 @@ abstract class VariableSelection {
     printTitlesToFile(info)
 
     //Burn-in period
-    val burnInStates = calculateNewState(info.burnIn, info, fstate, FullStateList(Vector()))
+    val burnInStates = calculateNewState(info.burnIn, info, fstate, FullStateList(Vector()), true)
 
     val writeBufferSize = 1000
     val wantedIterations = writeBufferSize * info.thin
@@ -40,18 +40,18 @@ abstract class VariableSelection {
       }
       remainingIterations -= wantedIterations
 
-      val toWrite = calculateNewState(iterations, info, lastState, FullStateList(Vector()))
+      val toWrite = calculateNewState(iterations, info, lastState, FullStateList(Vector()), false)
       lastState = toWrite.fstateL.last
       //now write this buffer
       executor.execute { () => printToFile(toWrite) }
 
-      if(remainingIterations < 0){
-        //val ar = lastState.count/(njk * (info.noOfIter + info.burnIn)) //for lambda
-        val ar = lastState.count/(info.noOfIter + info.burnIn) //for tauHS
-        println("acceptance rate")
-        println(ar)
-
-      }
+//      if(remainingIterations < 0){
+//        //val ar = lastState.count/(njk * (info.noOfIter + info.burnIn)) //For lambda
+//        val ar = lastState.count/(info.noOfIter + info.burnIn) //For tauHS
+//        println("acceptance rate")
+//        println(ar)
+//
+//      }
     }
     executor.shutdown()
   }
@@ -61,24 +61,24 @@ abstract class VariableSelection {
   protected def printToFile(fullStateList: FullStateList): Unit
 
   @annotation.tailrec
-  private final def calculateNewState(n:Int, info: InitialInfo, fstate:FullState, fstateList:FullStateList): FullStateList = {
+  private final def calculateNewState(n:Int, info: InitialInfo, fstate:FullState, fstateList:FullStateList, inBurnIn: Boolean): FullStateList = {
     //println(fstate.acoefs)
     if (n==0) fstateList
     else{
       println(n)
-      val latestFullyUpdatedState: FullState = calculateNextState(info, fstate)
+      val latestFullyUpdatedState: FullState = calculateNextState(info, fstate, inBurnIn)
       if((n % info.thin).equals(0)) {
-        calculateNewState(n-1, info, latestFullyUpdatedState, FullStateList(fstateList.fstateL :+ latestFullyUpdatedState))
+        calculateNewState(n-1, info, latestFullyUpdatedState, FullStateList(fstateList.fstateL :+ latestFullyUpdatedState), inBurnIn)
       }
-      else calculateNewState(n-1, info, latestFullyUpdatedState, fstateList)
+      else calculateNewState(n-1, info, latestFullyUpdatedState, fstateList, inBurnIn)
     }
   }
 
-  private def calculateNextState(info: InitialInfo, fstate: FullState): FullState = {
+  private def calculateNextState(info: InitialInfo, fstate: FullState, inBurnIn: Boolean): FullState = {
     val latestmt = nextmutau(fstate, info)
     val latesttaus = nexttaus(latestmt, info)
     val latestcoefs = nextCoefs(latesttaus, info)
-    val latestFullyUpdatedState = nextIndicsInters(latestcoefs, info)
+    val latestFullyUpdatedState = nextIndicsInters(latestcoefs, info, inBurnIn)
     latestFullyUpdatedState
   }
 
