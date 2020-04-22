@@ -29,10 +29,10 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     val initGammas = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels) //Thetas represent the interaction coefficients gamma for this case
     val initLambdas = DenseMatrix.ones[Double](info.alphaLevels, info.betaLevels)
     val initTauHS = 1.0
-    val acceptanceCount = 0.0
-    val lambdaTunPar = 0.0
+    val initAcceptanceCount = 0.0
+    val initTuningPar = 0.0
 
-    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, acceptanceCount, lambdaTunPar)
+    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, initAcceptanceCount, initTuningPar, initAcceptanceCount, initTuningPar)
     calculateAllStates(info.noOfIter, info, fullStateInit)
   }
 
@@ -129,14 +129,43 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     val curGammaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
     val curLambdaEstim = DenseMatrix.zeros[Double](info.alphaLevels, info.betaLevels)
     var lsiLambda = 0.0
+    var lsiTauHS = 0.0
     var curTauHS = 0.0
     val njk = info.structure.sizeOfStructure() //no of interactions
     // val curTauHS = 1.0 //keep the tauHS const to 1 gives correct results
     var acceptedCountLambda = oldfullState.lambdaCount //counter for the times the proposed value is accepted
+    var acceptedCountTauHS = oldfullState.tauHSCount //counter for the times the proposed value is accepted
     iterationCount += 1
     // Sample tauHS here bcs it is common for all
     val oldTauHS = oldfullState.tauHS
-    val stepSizeTauHS = 0.5
+
+    //val stepSizeTauHS = 0.5
+    val stepSizeTauHS = if (inBurnIn){
+      //Estimate them here
+      if(iterationCount % 50 == 0){
+        val n = iterationCount/50
+        val deltan = scala.math.min(0.01, 1/sqrt(n))
+        println(s"deltan: " + deltan)
+        val accFrac = acceptedCountTauHS/50
+        println(s"accFrac: " + accFrac)
+        acceptedCountTauHS = 0
+        if(accFrac > 0.44){
+          lsiTauHS = oldfullState.tauHSTuningPar + deltan
+        }else{
+          lsiTauHS = oldfullState.tauHSTuningPar - deltan
+        }
+        println(s"variance: " + exp(lsiTauHS))
+        exp(lsiTauHS)
+      } else{
+        lsiTauHS = oldfullState.tauHSTuningPar
+        exp(lsiTauHS)
+      }
+    }else{ //if not in burnin
+      lsiTauHS = oldfullState.tauHSTuningPar
+      exp(lsiTauHS)
+    }
+
+    println(s"stepSizeTauHS", stepSizeTauHS)
 
     // 1. Use the proposal N(prevTauHS, stepSize) to propose a new location tauHS* (if value sampled <0 propose again until >0)
     val tauHSStar = breeze.stats.distributions.Gaussian(oldTauHS, stepSizeTauHS).draw()
@@ -144,6 +173,7 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     // Reject tauHSStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
     if(tauHSStar < 0){
       curTauHS = oldTauHS
+      println("in here")
     }
     else {
       val oldTauHSSQR = scala.math.pow(oldTauHS, 2)
@@ -174,44 +204,49 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
 
       if(A > u){
         curTauHS = tauHSStar
+        acceptedCountTauHS += 1
+        if(inBurnIn){
+          acceptedCountTauHS += 1
+          println("in here")
+        }
       } else{
         curTauHS = oldTauHS
       }
     }
 
-    val stepSizeLambda = if (inBurnIn){
-      //Estimate them here
-      if(iterationCount % 50 == 0){
-        val n = iterationCount/50
-        val deltan = scala.math.min(0.01, 1/sqrt(n))
-        println(s"deltan: " + deltan)
-        val accFrac = acceptedCountLambda/(50 * info.structure.sizeOfStructure())
-        println(s"accFrac: " + accFrac)
-        acceptedCountLambda = 0
-        if(accFrac > 0.44){
-          lsiLambda = oldfullState.lambdaTuningPar + deltan
-        }else{
-          lsiLambda = oldfullState.lambdaTuningPar - deltan
-        }
-        println(s"variance: " + exp(lsiLambda))
-        exp(lsiLambda)
-      } else{
-        lsiLambda = oldfullState.lambdaTuningPar
-        exp(lsiLambda)
-      }
-    }else{ //if not in burnin
-      lsiLambda = oldfullState.lambdaTuningPar
-      exp(lsiLambda)
-    }
-
-    println(s"stepSizeLambda", stepSizeLambda)
+//    val stepSizeLambda = if (inBurnIn){
+//      //Estimate them here
+//      if(iterationCount % 50 == 0){
+//        val n = iterationCount/50
+//        val deltan = scala.math.min(0.01, 1/sqrt(n))
+//        println(s"deltan: " + deltan)
+//        val accFrac = acceptedCountLambda/(50 * njk)
+//        println(s"accFrac: " + accFrac)
+//        acceptedCountLambda = 0
+//        if(accFrac > 0.44){
+//          lsiLambda = oldfullState.lambdaTuningPar + deltan
+//        }else{
+//          lsiLambda = oldfullState.lambdaTuningPar - deltan
+//        }
+//        println(s"variance: " + exp(lsiLambda))
+//        exp(lsiLambda)
+//      } else{
+//        lsiLambda = oldfullState.lambdaTuningPar
+//        exp(lsiLambda)
+//      }
+//    }else{ //if not in burnin
+//      lsiLambda = oldfullState.lambdaTuningPar
+//      exp(lsiLambda)
+//    }
+//
+//    println(s"stepSizeLambda", stepSizeLambda)
 
     info.structure.foreach(item => {
       // Update lambda_jk
       // 1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
       val oldLambda = oldfullState.lambdas(item.a, item.b)
       val curGamma = oldfullState.gammaCoefs(item.a, item.b)
-      //val stepSizeLambda = 2.5 //sigma
+      val stepSizeLambda = 2.5 //sigma
 
       val lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSizeLambda).draw()
 
@@ -254,7 +289,7 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     })
 
     //println(curGammaEstim)
-    oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, lambdaCount = acceptedCountLambda, lambdaTuningPar = lsiLambda)
+    oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, lambdaCount = acceptedCountLambda, lambdaTuningPar = lsiLambda, tauHSCount = acceptedCountTauHS, tauHSTuningPar = lsiTauHS)
   }
 
   /**
