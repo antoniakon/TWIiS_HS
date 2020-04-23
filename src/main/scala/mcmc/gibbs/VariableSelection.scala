@@ -45,14 +45,14 @@ abstract class VariableSelection {
       //now write this buffer
       executor.execute { () => printToFile(toWrite) }
 
-      if(remainingIterations < 0){
-        //val ar = lastState.count/(njk * (info.noOfIter + info.burnIn)) //For lambda
-        println(lastState.tauHSCount)
-        val ar = lastState.tauHSCount/(info.noOfIter + info.burnIn) //For tauHS
-        println("acceptance rate")
-        println(ar)
-
-      }
+//      if(remainingIterations < 0 || remainingIterations == 0){
+//        //val ar = lastState.count/(njk * (info.noOfIter + info.burnIn)) //For lambda
+//        //println(lastState.tauHSCount)
+//        val ar = lastState.tauHSCount/(info.noOfIter + info.burnIn) //For tauHS
+//        println("acceptance rate")
+//        println(ar)
+//
+//      }
     }
     executor.shutdown()
   }

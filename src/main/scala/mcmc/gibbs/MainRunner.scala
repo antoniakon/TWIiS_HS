@@ -47,8 +47,8 @@ object MainRunner {
     val betaLevelsDist = beta.toArray.distinct.length
 
     // Parameters
-    val noOfIters = 1000
-    val thin = 100
+    val noOfIters = 100000
+    val thin = 10
     val aPrior = 1
     val bPrior = 0.0001
     val alphaPriorMean = 0.0
@@ -59,7 +59,7 @@ object MainRunner {
     val b = 0.0001
     val interPriorMean = 0.0 //common mean for all the interaction effects
     val p = 0.2
-    val burnIn = 10000
+    val burnIn = 30000
 
     val initialInfo = InitialInfo(noOfIters, thin, burnIn, sampleSize, sumObs, structure, structureSorted, alphaLevels, betaLevels, zetaLevels, noOfInters, sizeofDouble, alphaLevelsDist, betaLevelsDist,
       alphaPriorMean, betaPriorMean, interPriorMean, mu0, tau0,

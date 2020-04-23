@@ -132,41 +132,54 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     var lsiTauHS = 0.0
     var curTauHS = 0.0
     val njk = info.structure.sizeOfStructure() //no of interactions
-    // val curTauHS = 1.0 //keep the tauHS const to 1 gives correct results
+    val batchSize = 50 //batch size for automatic tuning
+
     var acceptedCountLambda = oldfullState.lambdaCount //counter for the times the proposed value is accepted
     var acceptedCountTauHS = oldfullState.tauHSCount //counter for the times the proposed value is accepted
     iterationCount += 1
-    // Sample tauHS here bcs it is common for all
+
+    // Update tauHS here because it is common for all gammas
     val oldTauHS = oldfullState.tauHS
 
-    val stepSizeTauHS = 0.014
+    //val stepSizeTauHS = 0.014
+    //val stepSizeLambda = 2.5 //sigma
+
     // Automatic adaptation of the tuning parameters based on paper: http://probability.ca/jeff/ftpdir/adaptex.pdf
-//    val stepSizeTauHS = if (inBurnIn){
-//      //Estimate them here
-//      if(iterationCount % 50 == 0){
-//        val n = iterationCount/50
-//        val deltan = scala.math.min(0.01, 1/sqrt(n))
-//        println(s"deltan: " + deltan)
-//        val accFrac = acceptedCountTauHS/50
-//        println(s"accFrac: " + accFrac)
-//        acceptedCountTauHS = 0
-//        if(accFrac > 0.44){
-//          lsiTauHS = oldfullState.tauHSTuningPar + deltan
-//        }else{
-//          lsiTauHS = oldfullState.tauHSTuningPar - deltan
-//        }
-//        println(s"variance: " + exp(lsiTauHS))
-//        exp(lsiTauHS)
-//      } else{
-//        lsiTauHS = oldfullState.tauHSTuningPar
-//        exp(lsiTauHS)
-//      }
-//    }else{ //if not in burnin
-//      lsiTauHS = oldfullState.tauHSTuningPar
-//      exp(lsiTauHS)
-//    }
-//
+    val (stepSizeTauHS, stepSizeLambda) = if (inBurnIn){
+      if(iterationCount % batchSize == 0){
+        val n = iterationCount / batchSize
+        val deltan = scala.math.min(0.01, 1/sqrt(n))
+
+        val accFracHS = acceptedCountTauHS / batchSize
+        val accFracLambda = acceptedCountLambda / (batchSize * njk)
+
+        acceptedCountTauHS = 0
+        acceptedCountLambda = 0
+
+        if(accFracHS > 0.44){
+          lsiTauHS = oldfullState.tauHSTuningPar + deltan
+        }else{
+          lsiTauHS = oldfullState.tauHSTuningPar - deltan
+        }
+        if(accFracLambda > 0.44){
+          lsiLambda = oldfullState.lambdaTuningPar + deltan
+        }else{
+          lsiLambda = oldfullState.lambdaTuningPar - deltan
+        }
+        (exp(lsiTauHS), exp(lsiLambda))
+      } else{ // if not batch of 50 completed
+        lsiTauHS = oldfullState.tauHSTuningPar
+        lsiLambda = oldfullState.lambdaTuningPar
+        (exp(lsiTauHS), exp(lsiLambda))
+      }
+    }else{ // if not in burn-in
+      lsiTauHS = oldfullState.tauHSTuningPar
+      lsiLambda = oldfullState.lambdaTuningPar
+      (exp(lsiTauHS), exp(lsiLambda))
+    }
+
 //    println(s"stepSizeTauHS", stepSizeTauHS)
+//    println(s"stepSizeLambda", stepSizeLambda)
 
     // 1. Use the proposal N(prevTauHS, stepSize) to propose a new location tauHS* (if value sampled <0 propose again until >0)
     val tauHSStar = breeze.stats.distributions.Gaussian(oldTauHS, stepSizeTauHS).draw()
@@ -174,7 +187,6 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     // Reject tauHSStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
     if(tauHSStar < 0){
       curTauHS = oldTauHS
-      println("in here")
     }
     else {
       val oldTauHSSQR = scala.math.pow(oldTauHS, 2)
@@ -205,56 +217,25 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
 
       if(A > u){
         curTauHS = tauHSStar
-        //acceptedCountTauHS += 1
         if(inBurnIn){
           acceptedCountTauHS += 1
-          println("in here")
         }
       } else{
         curTauHS = oldTauHS
       }
     }
 
-//    val stepSizeLambda = if (inBurnIn){
-//      //Estimate them here
-//      if(iterationCount % 50 == 0){
-//        val n = iterationCount/50
-//        val deltan = scala.math.min(0.01, 1/sqrt(n))
-//        println(s"deltan: " + deltan)
-//        val accFrac = acceptedCountLambda/(50 * njk)
-//        println(s"accFrac: " + accFrac)
-//        acceptedCountLambda = 0
-//        if(accFrac > 0.44){
-//          lsiLambda = oldfullState.lambdaTuningPar + deltan
-//        }else{
-//          lsiLambda = oldfullState.lambdaTuningPar - deltan
-//        }
-//        println(s"variance: " + exp(lsiLambda))
-//        exp(lsiLambda)
-//      } else{
-//        lsiLambda = oldfullState.lambdaTuningPar
-//        exp(lsiLambda)
-//      }
-//    }else{ //if not in burnin
-//      lsiLambda = oldfullState.lambdaTuningPar
-//      exp(lsiLambda)
-//    }
-//
-//    println(s"stepSizeLambda", stepSizeLambda)
-
     info.structure.foreach(item => {
       // Update lambda_jk
       // 1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
       val oldLambda = oldfullState.lambdas(item.a, item.b)
       val curGamma = oldfullState.gammaCoefs(item.a, item.b)
-      val stepSizeLambda = 2.5 //sigma
 
       val lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSizeLambda).draw()
 
       // Reject lambdaStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
       if(lambdaStar < 0){
         curLambdaEstim(item.a, item.b) = oldLambda
-        //println("In here")
       }
       else {
         val oldLambdaSQR = scala.math.pow(oldLambda, 2)
@@ -262,21 +243,18 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
         val tauHSSQR = scala.math.pow(curTauHS, 2)
 
         //2. Find the acceptance ratio A. Using the log is better and less prone to errors.
-        //val A = ((oldLambdaSQR + 1.0) * oldLambda / (lambdaStarSQR + 1.0) * lambdaStar) * exp((scala.math.pow(curGamma, 2)/(2.0 * tauHSSQR)) * ((1/oldLambdaSQR) - (1/lambdaStarSQR)))
         val A = log(oldLambdaSQR + 1) + log(oldLambda) - log(lambdaStarSQR) - log(lambdaStar) + (scala.math.pow(curGamma, 2)/(2.0 * tauHSSQR)) * ((1/oldLambdaSQR) - (1/lambdaStarSQR))
-        //println(A)
+
         //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
         val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
 
         if(A > u){
           curLambdaEstim(item.a, item.b) = lambdaStar
-          //acceptedCountLambda += 1
           if(inBurnIn){
             acceptedCountLambda += 1
           }
         } else{
           curLambdaEstim(item.a, item.b) = oldLambda
-          //println("reject")
         }
       }
 
