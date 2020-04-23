@@ -139,33 +139,34 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     // Sample tauHS here bcs it is common for all
     val oldTauHS = oldfullState.tauHS
 
-    //val stepSizeTauHS = 0.5
-    val stepSizeTauHS = if (inBurnIn){
-      //Estimate them here
-      if(iterationCount % 50 == 0){
-        val n = iterationCount/50
-        val deltan = scala.math.min(0.01, 1/sqrt(n))
-        println(s"deltan: " + deltan)
-        val accFrac = acceptedCountTauHS/50
-        println(s"accFrac: " + accFrac)
-        acceptedCountTauHS = 0
-        if(accFrac > 0.44){
-          lsiTauHS = oldfullState.tauHSTuningPar + deltan
-        }else{
-          lsiTauHS = oldfullState.tauHSTuningPar - deltan
-        }
-        println(s"variance: " + exp(lsiTauHS))
-        exp(lsiTauHS)
-      } else{
-        lsiTauHS = oldfullState.tauHSTuningPar
-        exp(lsiTauHS)
-      }
-    }else{ //if not in burnin
-      lsiTauHS = oldfullState.tauHSTuningPar
-      exp(lsiTauHS)
-    }
-
-    println(s"stepSizeTauHS", stepSizeTauHS)
+    val stepSizeTauHS = 0.014
+    // Automatic adaptation of the tuning parameters based on paper: http://probability.ca/jeff/ftpdir/adaptex.pdf
+//    val stepSizeTauHS = if (inBurnIn){
+//      //Estimate them here
+//      if(iterationCount % 50 == 0){
+//        val n = iterationCount/50
+//        val deltan = scala.math.min(0.01, 1/sqrt(n))
+//        println(s"deltan: " + deltan)
+//        val accFrac = acceptedCountTauHS/50
+//        println(s"accFrac: " + accFrac)
+//        acceptedCountTauHS = 0
+//        if(accFrac > 0.44){
+//          lsiTauHS = oldfullState.tauHSTuningPar + deltan
+//        }else{
+//          lsiTauHS = oldfullState.tauHSTuningPar - deltan
+//        }
+//        println(s"variance: " + exp(lsiTauHS))
+//        exp(lsiTauHS)
+//      } else{
+//        lsiTauHS = oldfullState.tauHSTuningPar
+//        exp(lsiTauHS)
+//      }
+//    }else{ //if not in burnin
+//      lsiTauHS = oldfullState.tauHSTuningPar
+//      exp(lsiTauHS)
+//    }
+//
+//    println(s"stepSizeTauHS", stepSizeTauHS)
 
     // 1. Use the proposal N(prevTauHS, stepSize) to propose a new location tauHS* (if value sampled <0 propose again until >0)
     val tauHSStar = breeze.stats.distributions.Gaussian(oldTauHS, stepSizeTauHS).draw()
@@ -204,7 +205,7 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
 
       if(A > u){
         curTauHS = tauHSStar
-        acceptedCountTauHS += 1
+        //acceptedCountTauHS += 1
         if(inBurnIn){
           acceptedCountTauHS += 1
           println("in here")
@@ -288,7 +289,6 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
       curGammaEstim(item.a, item.b) = breeze.stats.distributions.Gaussian(meanPInter, sqrt(varInter)).draw()
     })
 
-    //println(curGammaEstim)
     oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, lambdaCount = acceptedCountLambda, lambdaTuningPar = lsiLambda, tauHSCount = acceptedCountTauHS, tauHSTuningPar = lsiTauHS)
   }
 
@@ -378,7 +378,15 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
         (1 to info.alphaLevels).map { i => "theta".concat(i.toString).concat(entry) }.mkString(",")
       }.mkString(",")
 
-    pw.append("mu ,tau, taua, taub,")
+    val lambdaTitles = (1 to info.betaLevels)
+      .map { j => "-".concat(j.toString) }
+      .map { entry =>
+        (1 to info.alphaLevels).map { i => "lambda".concat(i.toString).concat(entry) }.mkString(",")
+      }.mkString(",")
+
+    pw.append("mu ,tau, taua, taub, tauHS,")
+      .append(lambdaTitles)
+      .append(",")
       .append( (1 to info.alphaLevels).map { i => "alpha".concat(i.toString) }.mkString(",") )
       .append(",")
       .append( (1 to info.betaLevels).map { i => "beta".concat(i.toString) }.mkString(",") )
@@ -399,6 +407,10 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
         .append(fullstate.mt(1).toString)
         .append(",")
         .append( fullstate.tauab.toArray.map { tau => tau.toString }.mkString(",") )
+        .append(",")
+        .append( fullstate.tauHS.toString )
+        .append(",")
+        .append( fullstate.lambdas.toArray.map { theta => theta.toString }.mkString(",") )
         .append(",")
         .append( fullstate.acoefs.toArray.map { alpha => alpha.toString }.mkString(",") )
         .append(",")
