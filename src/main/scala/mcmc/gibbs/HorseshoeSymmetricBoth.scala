@@ -34,31 +34,6 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
   }
 
   /**
-   * Function for updating taus (tauz, tauInt)
-   */
-  override def nexttaus(oldfullState: FullState, info: InitialInfo): FullState = {
-
-    //todo: check if acoef non set values create an issue
-    var sumzj = 0.0
-    oldfullState.zcoefs.foreachValue(zcoef => {
-      sumzj += pow(zcoef - info.alphaPriorMean, 2)
-    })
-
-    //todo: check if thcoef non set values create an issue
-    var sumThetajk = 0.0
-    upperTriangular(oldfullState.thcoefs).foreachValue(thcoef => {
-      sumThetajk += pow(thcoef - info.thetaPriorMean, 2) // Sum used in sampling from Gamma distribution for the precision of theta/interacions
-    })
-    sumThetajk += (info.noOfInters - info.sizeOfDouble) * pow(-info.thetaPriorMean, 2)
-
-    val njk = info.noOfInters // Number of levels of interactions
-    val newtauZeta = breeze.stats.distributions.Gamma(info.aPrior + info.zetaLevels / 2.0, 1.0 / (info.bPrior + 0.5 * sumzj)).draw() //sample the precision of alpha from gamma
-    val newtauTheta = breeze.stats.distributions.Gamma(info.aPrior + njk / 2.0, 1.0 / (info.bPrior + 0.5 * sumThetajk)).draw() // sample the precision of the interactions gamma from gamma Distribition
-
-    oldfullState.copy(tauabth = DenseVector(newtauZeta, newtauTheta))
-  }
-
-  /**
    * Function for updating indicators, interactions and final interaction coefficients
    */
   override def nextIndicsInters(oldfullState: FullState, info: InitialInfo): FullState = {
