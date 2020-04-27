@@ -53,7 +53,6 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
    * Function for updating taus (taua, taub, tauInt)
    */
   override def nexttaus(oldfullState: FullState, info: InitialInfo): FullState = {
-    val njk = info.structure.sizeOfStructure() // Number of levels of interactions
 
     var sumaj = 0.0
     oldfullState.acoefs.foreachValue(acoef => {
@@ -66,12 +65,6 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
       sumbk += pow(bcoef - info.betaPriorMean, 2)
     })
     sumbk -= (info.betaLevels - info.betaLevelsDist) * pow(0 - info.betaPriorMean, 2) //For the missing effects (if any) added extra in the sum above
-
-    var sumThetajk = 0.0
-    oldfullState.gammaCoefs.foreachValue(gcoeff => {
-      sumThetajk += pow(gcoeff - info.gammaPriorMean, 2) // Sum used in sampling from Gamma distribution for the precision of theta/interacions
-    })
-    sumThetajk -= (info.alphaLevels * info.betaLevels - njk) * pow(0 - info.betaPriorMean, 2) //For the missing effects (if any) added extra in the sum above
 
     val newtauAlpha = breeze.stats.distributions.Gamma(info.aPrior + info.alphaLevelsDist / 2.0, 1.0 / (info.bPrior + 0.5 * sumaj)).draw() //sample the precision of alpha from gamma
     val newtauBeta = breeze.stats.distributions.Gamma(info.aPrior + info.betaLevelsDist / 2.0, 1.0 / (info.bPrior + 0.5 * sumbk)).draw() // sample the precision of beta from gamma

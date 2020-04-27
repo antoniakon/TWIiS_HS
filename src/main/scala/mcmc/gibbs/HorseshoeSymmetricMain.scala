@@ -56,14 +56,8 @@ class HorseshoeSymmetricMain extends VariableSelection {
     oldfullState.zcoefs.foreachValue( zcoef => {
       sumzj += pow(zcoef - info.alphaPriorMean, 2)
     })
+    sumzj -= (info.zetaLevels - info.zetaLevelsDist) * pow(0 - info.alphaPriorMean, 2) //For the missing effects (if any) added extra in the sum above
 
-    //todo: check if thcoef non set values create an issue
-    var sumThetajk = 0.0
-    oldfullState.gammaCoefs.foreachValue(gcoef => {
-      sumThetajk += pow(gcoef -info.gammaPriorMean, 2) // Sum used in sampling from Gamma distribution for the precision of theta/interacions
-    })
-
-    val njk = info.structure.sizeOfStructure() // Number of levels of interactions
     val newtauZeta = breeze.stats.distributions.Gamma(info.aPrior + info.zetaLevels / 2.0, 1.0 / (info.bPrior + 0.5 * sumzj)).draw() //sample the precision of alpha from gamma
 
     oldfullState.copy(tauab = DenseVector(newtauZeta))

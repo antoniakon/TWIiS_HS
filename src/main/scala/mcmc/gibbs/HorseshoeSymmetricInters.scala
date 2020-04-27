@@ -32,37 +32,7 @@ class HorseshoeSymmetricInters extends HorseshoeAsymmetricBoth {
     val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, initAcceptanceCount, initTuningPar, initAcceptanceCount, initTuningPar)
     calculateAllStates(info.noOfIter, info, fullStateInit)
   }
-
-  /**
-   * Function for updating taus (taua, taub, tauInt)
-   */
-  override def nexttaus(oldfullState: FullState, info: InitialInfo): FullState = {
-
-    //todo: check if acoef non set values create an issue
-    var sumaj = 0.0
-    oldfullState.acoefs.foreachValue(acoef => {
-      sumaj += pow(acoef - info.alphaPriorMean, 2)
-    })
-
-    //todo: check if bcoef non set values create an issue
-    var sumbk = 0.0
-    oldfullState.bcoefs.foreachValue(bcoef => {
-      sumbk += pow(bcoef - info.betaPriorMean, 2)
-    })
-
-    //todo: check if thcoef non set values create an issue
-    var sumThetajk = 0.0
-    upperTriangular(oldfullState.gammaCoefs).foreachValue(gcoef => {
-      sumThetajk += pow(gcoef - info.gammaPriorMean, 2) // Sum used in sampling from Gamma distribution for the precision of theta/interacions
-    })
-    sumThetajk += (info.noOfInters - info.sizeOfDouble) * pow(-info.gammaPriorMean, 2)
-
-    val newtauAlpha = breeze.stats.distributions.Gamma(info.aPrior + info.alphaLevelsDist / 2.0, 1.0 / (info.bPrior + 0.5 * sumaj)).draw() //sample the precision of alpha from gamma
-    val newtauBeta = breeze.stats.distributions.Gamma(info.aPrior + info.betaLevelsDist / 2.0, 1.0 / (info.bPrior + 0.5 * sumbk)).draw() // sample the precision of beta from gamma
-
-    oldfullState.copy(tauab = DenseVector(newtauAlpha, newtauBeta))
-  }
-
+  
   /**
    * Function for updating indicators, interactions and final interaction coefficients
    */
