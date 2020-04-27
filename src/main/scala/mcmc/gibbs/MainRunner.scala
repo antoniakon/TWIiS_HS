@@ -47,7 +47,7 @@ object MainRunner {
 
     val sizeofDouble = structure.sizeOfDouble()
     val noOftriangular = zetaLevels * (zetaLevels+1) / 2
-    
+
     val alphaLevelsDist = alphaDistinct.length
     val betaLevelsDist = betaDistinct.length
 
@@ -66,7 +66,7 @@ object MainRunner {
     val p = 0.2
     val burnIn = 30000
 
-    val initialInfo = InitialInfo(noOfIters, thin, burnIn, sampleSize, sumObs, structure, structureSorted, alphaLevels, betaLevels, zetaLevels, noOfInters, sizeofDouble, alphaLevelsDist, betaLevelsDist,
+    val initialInfo = InitialInfo(noOfIters, thin, burnIn, sampleSize, sumObs, structure, structureSorted, alphaLevels, betaLevels, zetaLevels, noOfInters, sizeofDouble, alphaLevelsDist, betaLevelsDist, zetaLevelsDist, noOftriangular,
       alphaPriorMean, betaPriorMean, interPriorMean, mu0, tau0,
       a, b, aPrior, bPrior, p)
 
