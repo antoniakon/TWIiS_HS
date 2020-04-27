@@ -21,8 +21,11 @@ object MainRunner {
     val beta = data(::, 2).map(_.toInt).map(x => x - 1)
     //    val structure : DVStructure = new DVStructureArrays(y, alpha, beta)
     val structure : DVStructure = new DVStructureIndexedMapMemo(y, alpha, beta)
-    val alphaLevels = alpha.toArray.distinct.max+1
-    val betaLevels = beta.toArray.distinct.max+1
+    val alphaDistinct = alpha.toArray.distinct
+    val betaDistinct = beta.toArray.distinct
+    val zetaDistinct = alphaDistinct.union(betaDistinct).distinct
+    val alphaLevels = alphaDistinct.max + 1
+    val betaLevels = betaDistinct.max + 1
 
     // For the symmetric interactions case sort the data, smaller first
     val alphaSorted = DenseVector.zeros[Int](sampleSize)
@@ -39,12 +42,13 @@ object MainRunner {
 
     val structureSorted : DVStructure = new DVStructureIndexedMapMemo(y, alphaSorted, betaSorted) // Sorted structure to be used for the indices to run through the data but not repeat e.g. only (1,3) and not (3,1)
     val noOfInters = structureSorted.sizeOfStructure()
-    val zetaLevels = max(alphaLevels, betaLevels)
+    val zetaLevels = zetaDistinct.max + 1
+    val zetaLevelsDist = zetaDistinct.length
 
     val sizeofDouble = structure.sizeOfDouble()
-    //Used for SymmetricMain
-    val alphaLevelsDist = alpha.toArray.distinct.length
-    val betaLevelsDist = beta.toArray.distinct.length
+
+    val alphaLevelsDist = alphaDistinct.length
+    val betaLevelsDist = betaDistinct.length
 
     // Parameters
     val noOfIters = 100000
