@@ -46,7 +46,8 @@ object MainRunner {
     val zetaLevelsDist = zetaDistinct.length
 
     val sizeofDouble = structure.sizeOfDouble()
-
+    val noOftriangular = zetaLevels * (zetaLevels+1) / 2
+    
     val alphaLevelsDist = alphaDistinct.length
     val betaLevelsDist = betaDistinct.length
 
