@@ -89,10 +89,10 @@ class HorseshoeSymmetricMain extends VariableSelection {
       val Njj = info.structure.calcDoubleZetaLength(j) // the number of the observations that have zeta == j on both sides
       val SXZetajDouble = info.structure.calcDoubleZetaSum(j) // the sum of the observations that have zeta == j on both sides
       val SumZeta = sumEffectsOfOtherZetas(info.structure, j, curZetaEstim) //the sum of the other zeta effects given zeta, for which the given z is on either side (but not on both sides)
-      val SinterZeta = sumInterEffGivenZeta(info.structure, j, oldfullState.thcoefs, oldfullState.indics) //the sum of the gamma/interaction effects given zeta, for which the given z is on either side (but not on both sides)
-      val SinterZetaDoubles = sumInterEffDoublesGivenZeta(info.structure, j, oldfullState.thcoefs, oldfullState.indics) //the sum of the gamma/interaction effects given zeta, for which the given z is on both sides
-      val varPzeta = 1.0 / (oldfullState.tauabth(0) + oldfullState.mt(1) * Nj + 4 * oldfullState.mt(1) * Njj) //the variance for zetaj
-      val meanPzeta = (info.alphaPriorMean * oldfullState.tauabth(0) + oldfullState.mt(1) * (SXZetaj - Nj * oldfullState.mt(0) - SumZeta - SinterZeta + 2 * SXZetajDouble - 2 * Njj * oldfullState.mt(0) - 2 * SinterZetaDoubles )) * varPzeta //the mean for alphaj
+      val SinterZeta = sumInterEffGivenZeta(info.structure, j, oldfullState.gammaCoefs) //the sum of the gamma/interaction effects given zeta, for which the given z is on either side (but not on both sides)
+      val SinterZetaDoubles = sumInterEffDoublesGivenZeta(info.structure, j, oldfullState.gammaCoefs) //the sum of the gamma/interaction effects given zeta, for which the given z is on both sides
+      val varPzeta = 1.0 / (oldfullState.tauab(0) + oldfullState.mt(1) * Nj + 4 * oldfullState.mt(1) * Njj) //the variance for zetaj
+      val meanPzeta = (info.alphaPriorMean * oldfullState.tauab(0) + oldfullState.mt(1) * (SXZetaj - Nj * oldfullState.mt(0) - SumZeta - SinterZeta + 2 * SXZetajDouble - 2 * Njj * oldfullState.mt(0) - 2 * SinterZetaDoubles )) * varPzeta //the mean for alphaj
       curZetaEstim.update(j, breeze.stats.distributions.Gaussian(meanPzeta, sqrt(varPzeta)).draw())
     })
 
@@ -171,15 +171,15 @@ class HorseshoeSymmetricMain extends VariableSelection {
   /**
    * Add all the interaction effects for a given zeta. Adds all the interactions for which zeta is on either side. Includes the doubles bcs getZetasItemsForGivenZ uses a structure that includes everything
    */
-  def sumInterEffGivenZeta(structure: DVStructure, zetaIndex: Int, interEff: DenseMatrix[Double], indics: DenseMatrix[Double]): Double = {
-    structure.getAllOtherZetasItemsForGivenZ(zetaIndex).map(elem => elem._2.length * indics(elem._1._1, elem._1._2) * interEff(elem._1._1, elem._1._2)).reduce(_+_)
+  def sumInterEffGivenZeta(structure: DVStructure, zetaIndex: Int, interEff: DenseMatrix[Double]): Double = {
+    structure.getAllOtherZetasItemsForGivenZ(zetaIndex).map(elem => elem._2.length * interEff(elem._1._1, elem._1._2)).reduce(_+_)
   }
 
   /**
    * Add all the interaction effects for a given zeta which is double (zeta,zeta)
    */
-  def sumInterEffDoublesGivenZeta(structure: DVStructure, zetaIndex: Int, interEff: DenseMatrix[Double], indics: DenseMatrix[Double]): Double = {
-    structure.getAllDoubleZetasItemsForGivenZ(zetaIndex).map(elem => elem._2.length * indics(elem._1._1, elem._1._2) * interEff(elem._1._1, elem._1._2)).reduce(_+_)
+  def sumInterEffDoublesGivenZeta(structure: DVStructure, zetaIndex: Int, interEff: DenseMatrix[Double]): Double = {
+    structure.getAllDoubleZetasItemsForGivenZ(zetaIndex).map(elem => elem._2.length * interEff(elem._1._1, elem._1._2)).reduce(_+_)
   }
 
   /**
