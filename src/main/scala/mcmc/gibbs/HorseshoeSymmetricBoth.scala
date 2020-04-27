@@ -221,18 +221,18 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
         (1 to info.zetaLevels).map { i => "theta".concat(i.toString).concat(entry) }.mkString(",")
       }.mkString(",")
 
-    val indicsTitles = (1 to info.zetaLevels)
+    val lambdaTitles = (1 to info.zetaLevels)
       .map { j => "-".concat(j.toString) }
       .map { entry =>
-        (1 to info.zetaLevels).map { i => "indics".concat(i.toString).concat(entry) }.mkString(",")
+        (1 to info.zetaLevels).map { i => "lambda".concat(i.toString).concat(entry) }.mkString(",")
       }.mkString(",")
 
-    pw.append("mu ,tau, tauz, tauInt,")
+    pw.append("mu ,tau, tauz, tauHS,")
+      .append(lambdaTitles)
+      .append(",")
       .append( (1 to info.zetaLevels).map { i => "zeta".concat(i.toString) }.mkString(",") )
       .append(",")
       .append(thetaTitles)
-      .append(",")
-      .append(indicsTitles)
       .append("\n")
 
     pw.close()
@@ -247,13 +247,15 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
         .append(",")
         .append(fullstate.mt(1).toString)
         .append(",")
-        .append( fullstate.tauabth.toArray.map { tau => tau.toString }.mkString(",") )
+        .append( fullstate.tauab.toArray.map { tau => tau.toString }.mkString(",") )
+        .append(",")
+        .append( fullstate.tauHS.toString )
+        .append(",")
+        .append( fullstate.lambdas.toArray.map { theta => theta.toString }.mkString(",") )
         .append(",")
         .append( fullstate.zcoefs.toArray.map { alpha => alpha.toString }.mkString(",") )
         .append(",")
-        .append( fullstate.finalCoefs.toArray.map { theta => theta.toString }.mkString(",") )
-        .append(",")
-        .append( fullstate.indics.toArray.map { ind => ind.toString }.mkString(",") )
+        .append( fullstate.gammaCoefs.toArray.map { theta => theta.toString }.mkString(",") )
         .append("\n")
     }
     pw.close()
