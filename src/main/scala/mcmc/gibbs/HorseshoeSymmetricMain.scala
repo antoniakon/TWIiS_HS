@@ -38,10 +38,10 @@ class HorseshoeSymmetricMain extends VariableSelection {
    */
   override def nextmutau(oldfullState: FullState, info: InitialInfo): FullState= {
     val varMu = 1.0 / (info.tau0 + info.N * oldfullState.mt(1)) //the variance for mu
-    val meanMu = (info.mu0 * info.tau0 + oldfullState.mt(1) * (info.SumObs - sumAllMainInterEff(info.structure, oldfullState.zcoefs, info.zetaLevels, oldfullState.thcoefs, oldfullState.indics))) * varMu
+    val meanMu = (info.mu0 * info.tau0 + oldfullState.mt(1) * (info.SumObs - sumAllMainInterEff(info.structure, oldfullState.zcoefs, info.zetaLevels, oldfullState.gammaCoefs))) * varMu
     val newmu = breeze.stats.distributions.Gaussian(meanMu, sqrt(varMu)).draw()
     //Use the just updated mu to estimate tau
-    val newtau = breeze.stats.distributions.Gamma(info.a + info.N / 2.0, 1.0 / (info.b + 0.5 * YminusMuAndEffects(info.structure, newmu, oldfullState.zcoefs, oldfullState.thcoefs, oldfullState.indics))).draw() //  !!!!TO SAMPLE FROM THE GAMMA DISTRIBUTION IN BREEZE THE β IS 1/β
+    val newtau = breeze.stats.distributions.Gamma(info.a + info.N / 2.0, 1.0 / (info.b + 0.5 * YminusMuAndEffects(info.structure, newmu, oldfullState.zcoefs, oldfullState.gammaCoefs))).draw() //  !!!!TO SAMPLE FROM THE GAMMA DISTRIBUTION IN BREEZE THE β IS 1/β
     oldfullState.copy(mt=DenseVector(newmu,newtau))
   }
 
@@ -161,10 +161,10 @@ class HorseshoeSymmetricMain extends VariableSelection {
   /**
    * Calculate the sum of all the zeta 1 and all the zeta 2 effects for all the observations.
    */
-  def sumAllMainInterEff(structure: DVStructure, zetaEff: DenseVector[Double], nz: Int, interEff: DenseMatrix[Double], indics: DenseMatrix[Double]): Double = {
+  def sumAllMainInterEff(structure: DVStructure, zetaEff: DenseVector[Double], nz: Int, interEff: DenseMatrix[Double]): Double = {
     var totalsum = 0.0
     structure.foreach(item => {
-      totalsum += item.list.length * (zetaEff(item.a) + zetaEff(item.b) + indics(item.a, item.b) * interEff(item.a, item.b))
+      totalsum += item.list.length * (zetaEff(item.a) + zetaEff(item.b) + interEff(item.a, item.b))
     })
     totalsum
   }
