@@ -102,46 +102,150 @@ class HorseshoeSymmetricMain extends VariableSelection {
   /**
    * Function for updating indicators, interactions and final interaction coefficients
    */
-  override def nextIndicsInters(oldfullState: FullState, info: InitialInfo):FullState= {
+  override def nextIndicsInters(oldfullState: FullState, info: InitialInfo, inBurnIn: Boolean):FullState= {
+    val curGammaEstim = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
+    val curLambdaEstim = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
+    var lsiLambda = 0.0
+    var lsiTauHS = 0.0
+    var curTauHS = 0.0
+    val njk = info.structure.sizeOfStructure() //no of interactions
+    val batchSize = 50 //batch size for automatic tuning
 
-    val curIndicsEstim = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
-    val curThetaEstim = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
-    var count = 0.0
+    var acceptedCountLambda = oldfullState.lambdaCount //counter for the times the proposed value is accepted
+    var acceptedCountTauHS = oldfullState.tauHSCount //counter for the times the proposed value is accepted
+    iterationCount += 1
+
+    // Update tauHS here because it is common for all gammas
+    val oldTauHS = oldfullState.tauHS
+
+    //val stepSizeTauHS = 0.014
+    //val stepSizeLambda = 2.5 //sigma
+
+    // Automatic adaptation of the tuning parameters based on paper: http://probability.ca/jeff/ftpdir/adaptex.pdf
+    val (stepSizeTauHS, stepSizeLambda) = if (inBurnIn){
+      if(iterationCount % batchSize == 0){
+        val n = iterationCount / batchSize
+        val deltan = scala.math.min(0.01, 1/sqrt(n))
+
+        val accFracHS = acceptedCountTauHS / batchSize
+        val accFracLambda = acceptedCountLambda / (batchSize * njk)
+
+        acceptedCountTauHS = 0
+        acceptedCountLambda = 0
+
+        if(accFracHS > 0.44){
+          lsiTauHS = oldfullState.tauHSTuningPar + deltan
+        }else{
+          lsiTauHS = oldfullState.tauHSTuningPar - deltan
+        }
+        if(accFracLambda > 0.44){
+          lsiLambda = oldfullState.lambdaTuningPar + deltan
+        }else{
+          lsiLambda = oldfullState.lambdaTuningPar - deltan
+        }
+        (exp(lsiTauHS), exp(lsiLambda))
+      } else{ // if not batch of 50 completed
+        lsiTauHS = oldfullState.tauHSTuningPar
+        lsiLambda = oldfullState.lambdaTuningPar
+        (exp(lsiTauHS), exp(lsiLambda))
+      }
+    }else{ // if not in burn-in
+      lsiTauHS = oldfullState.tauHSTuningPar
+      lsiLambda = oldfullState.lambdaTuningPar
+      (exp(lsiTauHS), exp(lsiLambda))
+    }
+
+    //    println(s"stepSizeTauHS", stepSizeTauHS)
+    //    println(s"stepSizeLambda", stepSizeLambda)
+
+    // 1. Use the proposal N(prevTauHS, stepSize) to propose a new location tauHS* (if value sampled <0 propose again until >0)
+    val tauHSStar = breeze.stats.distributions.Gaussian(oldTauHS, stepSizeTauHS).draw()
+
+    // Reject tauHSStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
+    if(tauHSStar < 0){
+      curTauHS = oldTauHS
+    }
+    else {
+      val oldTauHSSQR = scala.math.pow(oldTauHS, 2)
+      val tauHSStarSQR = scala.math.pow(tauHSStar, 2)
+
+      /**
+       * Function for estimating the sqr of two matrices, do elementwise division if the denominator is not 0 and calculate the sum
+       */
+      def elementwiseDivisionSQRSum(a: DenseMatrix[Double], b: DenseMatrix[Double]): Double = {
+        var sum = 0.0
+        val aSQR = a.map(x => scala.math.pow(x, 2))
+        val bSQR = b.map(x => scala.math.pow(x, 2))
+        for (i <- 0 until info.zetaLevels){
+          for (j <- 0 until info.zetaLevels){
+            if(bSQR(i,j) != 0){
+              sum += aSQR(i,j) / bSQR(i,j)
+            }
+          }
+        }
+        sum
+      }
+
+      //2. Find the acceptance ratio A. Using the log is better and less prone to errors due to overflows.
+      val A = log(oldTauHSSQR + 1) + njk * log(oldTauHS) - log(tauHSStarSQR + 1) - njk * log(tauHSStar) + 0.5 * elementwiseDivisionSQRSum(oldfullState.gammaCoefs, oldfullState.lambdas) * ((1/oldTauHSSQR) - (1/tauHSStarSQR))
+
+      //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
+      val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
+
+      if(A > u){
+        curTauHS = tauHSStar
+        if(inBurnIn){
+          acceptedCountTauHS += 1
+        }
+      } else{
+        curTauHS = oldTauHS
+      }
+    }
 
     info.structure.foreach( item => {
+      // Update lambda_jk
+      // 1. Use the proposal N(prevLambda, stepSize) to propose a new location lambda* (if value sampled <0 propose again until >0)
+      val oldLambda = oldfullState.lambdas(item.a, item.b)
+      val curGamma = oldfullState.gammaCoefs(item.a, item.b)
+
+      val lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSizeLambda).draw()
+
+      // Reject lambdaStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
+      if(lambdaStar < 0){
+        curLambdaEstim(item.a, item.b) = oldLambda
+      }
+      else {
+        val oldLambdaSQR = scala.math.pow(oldLambda, 2)
+        val lambdaStarSQR = scala.math.pow(lambdaStar, 2)
+        val tauHSSQR = scala.math.pow(curTauHS, 2)
+
+        //2. Find the acceptance ratio A. Using the log is better and less prone to errors.
+        val A = log(oldLambdaSQR + 1) + log(oldLambda) - log(lambdaStarSQR) - log(lambdaStar) + (scala.math.pow(curGamma, 2)/(2.0 * tauHSSQR)) * ((1/oldLambdaSQR) - (1/lambdaStarSQR))
+
+        //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
+        val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
+
+        if(A > u){
+          curLambdaEstim(item.a, item.b) = lambdaStar
+          if(inBurnIn){
+            acceptedCountLambda += 1
+          }
+        } else{
+          curLambdaEstim(item.a, item.b) = oldLambda
+        }
+      }
+
+      // update gamma_jk
       val Njk = item.list.length // the number of the observations that have alpha==j and beta==k
       val SXjk = item.list.sum // the sum of the observations that have alpha==j and beta==k
 
-      val u = breeze.stats.distributions.Uniform(0, 1).draw()
-
-      //log-sum-exp trick
-      val thcoef = oldfullState.thcoefs(item.a, item.b)
-      val logInitExp = oldfullState.mt(1) * thcoef * (SXjk - Njk * (oldfullState.mt(0) + oldfullState.zcoefs(item.a) + oldfullState.zcoefs(item.b) + 0.5 * thcoef))
-      val logProb0 = log(1.0 - info.p) //The log of the probability I=0
-      val logProb1 = log(info.p) + logInitExp //The log of the probability I=1
-      val maxProb = max(logProb0, logProb1) //Find the max of the two probabilities
-      val scaledProb0 = exp(logProb0 - maxProb) //Scaled by subtracting the max value and exponentiating
-      val scaledProb1 = exp(logProb1 - maxProb) //Scaled by subtracting the max value and exponentiating
-      val newProb0 = scaledProb0 / (scaledProb0 + scaledProb1) //Normalised
-      // val newProb1 = scaledProb1 / (scaledProb0 + scaledProb1) //Normalised
-
-      if (newProb0 < u) {
-        //prob0: Probability for when the indicator = 0, so if prob0 < u => indicator = 1
-        curIndicsEstim(item.a, item.b) = 1.0
-        count += 1.0
-        val varPInter = 1.0 / (oldfullState.tauabth(1) + oldfullState.mt(1) * Njk) //the variance for gammajk
-        val meanPInter = (info.thetaPriorMean * oldfullState.tauabth(1) + oldfullState.mt(1) * (SXjk - Njk * (oldfullState.mt(0) + oldfullState.zcoefs(item.a) + oldfullState.zcoefs(item.b)))) * varPInter
-        curThetaEstim(item.a, item.b) = breeze.stats.distributions.Gaussian(meanPInter, sqrt(varPInter)).draw()
-      }
-      else {
-        //Update indicator and current interactions if indicator = 0.0
-        curIndicsEstim(item.a,item.b) = 0.0
-        curThetaEstim(item.a,item.b) = breeze.stats.distributions.Gaussian(info.thetaPriorMean, sqrt(1 / oldfullState.tauabth(1))).draw() // sample from the prior of interactions
-      }
+      val tauGammajk = 1.0 / scala.math.pow(curLambdaEstim(item.a, item.b) * curTauHS, 2)
+      val varPInter = 1.0 / (tauGammajk + oldfullState.mt(1) * Njk) //the variance for gammajk
+      val meanPInter = (info.gammaPriorMean * tauGammajk + oldfullState.mt(1) * (SXjk - Njk * (oldfullState.mt(0) + oldfullState.zcoefs(item.a) + oldfullState.zcoefs(item.b)))) * varPInter
+      curGammaEstim(item.a, item.b) = breeze.stats.distributions.Gaussian(meanPInter, sqrt(varPInter)).draw()
     })
 
-    oldfullState.copy(thcoefs = curThetaEstim, indics = curIndicsEstim, finalCoefs = curThetaEstim*:*curIndicsEstim)
-
+    oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, lambdaCount = acceptedCountLambda, lambdaTuningPar = lsiLambda, tauHSCount = acceptedCountTauHS, tauHSTuningPar = lsiTauHS)
   }
 
   /**
