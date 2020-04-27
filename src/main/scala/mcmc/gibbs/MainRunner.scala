@@ -72,6 +72,9 @@ object MainRunner {
 
   private def getVariableSelectionVariant() : VariableSelection = {
     object myHorseshoeAsymmetricBoth extends HorseshoeAsymmetricBoth
+    object myHorseshoeSymmetricInters extends HorseshoeSymmetricInters
+    object myHorseshoeSymmetricMain extends HorseshoeSymmetricMain
+    object myHorseshoeSymmetricBoth extends HorseshoeSymmetricBoth
     myHorseshoeAsymmetricBoth
   }
 }
