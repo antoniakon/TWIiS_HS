@@ -294,4 +294,7 @@ class DVStructureIndexedMapMemo(y: DenseVector[Double], alpha: DenseVector[Int],
   override def sizeOfStructure():Int = myStructure.keys.size
 
   override def sizeOfDouble():Int = myStructure.keys.filter(k => (k._1==k._2)).size
+
+  override def getAllZetas(): List[Int] =
+    zetaIndices.keys.toList
 }

@@ -70,5 +70,6 @@ trait DVStructure {
 
   def sizeOfDouble(): Int
 
+  def getAllZetas(): List[Int]
 
 }
