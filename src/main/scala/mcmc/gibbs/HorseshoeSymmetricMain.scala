@@ -46,7 +46,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
   }
 
   /**
-   * Function for updating taus (tauz, tauInt)
+   * Function for updating taus (tauz)
    */
   override def nexttaus(oldfullState: FullState, info: InitialInfo):FullState= {
 
@@ -59,15 +59,14 @@ class HorseshoeSymmetricMain extends VariableSelection {
 
     //todo: check if thcoef non set values create an issue
     var sumThetajk = 0.0
-    oldfullState.thcoefs.foreachValue(thcoef => {
-      sumThetajk += pow(thcoef -info.thetaPriorMean, 2) // Sum used in sampling from Gamma distribution for the precision of theta/interacions
+    oldfullState.gammaCoefs.foreachValue(gcoef => {
+      sumThetajk += pow(gcoef -info.gammaPriorMean, 2) // Sum used in sampling from Gamma distribution for the precision of theta/interacions
     })
 
     val njk = info.structure.sizeOfStructure() // Number of levels of interactions
     val newtauZeta = breeze.stats.distributions.Gamma(info.aPrior + info.zetaLevels / 2.0, 1.0 / (info.bPrior + 0.5 * sumzj)).draw() //sample the precision of alpha from gamma
-    val newtauTheta = breeze.stats.distributions.Gamma(info.aPrior + njk / 2.0, 1.0 / (info.bPrior + 0.5 * sumThetajk)).draw() // sample the precision of the interactions gamma from gamma Distribition
 
-    oldfullState.copy(tauabth = DenseVector(newtauZeta, newtauTheta))
+    oldfullState.copy(tauab = DenseVector(newtauZeta))
   }
 
   override def nextCoefs(oldfullState: FullState, info: InitialInfo): FullState = {
