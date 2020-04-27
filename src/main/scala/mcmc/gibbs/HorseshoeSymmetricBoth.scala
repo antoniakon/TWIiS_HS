@@ -204,13 +204,13 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
     oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, lambdaCount = acceptedCountLambda, lambdaTuningPar = lsiLambda, tauHSCount = acceptedCountTauHS, tauHSTuningPar = lsiTauHS)
   }
 
-  override def getFilesDirectory(): String = "/home/antonia/ResultsFromCloud/Report/symmetricMarch/symmetricBoth"
+  override def getFilesDirectory(): String = "/home/antonia/ResultsFromCloud/Report/symmetricNov/symmetricBoth"
 
   override def getInputFilePath(): String = getFilesDirectory.concat("/simulInterSymmetricBoth.csv")
 
-  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/ScalaRuntime100kSymmetricBoth.txt")
+  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/ScalaRuntime1mSymmetricBothHorseshoe.txt")
 
-  override def getOutputFilePath(): String = getFilesDirectory.concat("/symmetricBothScalaRes.csv")
+  override def getOutputFilePath(): String = getFilesDirectory.concat("/symmetricBothScalaRes1mHorseshoe.csv")
 
   override def printTitlesToFile(info: InitialInfo): Unit = {
     val pw = new PrintWriter(new File(getOutputFilePath()))
