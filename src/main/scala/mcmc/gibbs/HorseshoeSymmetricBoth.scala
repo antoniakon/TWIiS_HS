@@ -2,19 +2,20 @@ package mcmc.gibbs
 
 import java.io.{File, FileWriter, PrintWriter}
 import breeze.linalg.{DenseMatrix, DenseVector, max, upperTriangular}
-import breeze.numerics.{exp, log, pow, sqrt}
+import breeze.numerics.{exp, pow, sqrt}
+import scala.math.{log}
 
 /**
- * Variable selection with Gibbs sampler. Implementation for symmetric main effects and symmetric interactions.
+ * Variable selection with Horseshoe. Implementation for symmetric main effects and symmetric interactions.
  * Extends SymmetricMain for updating z coefficients, mu and tau. Implements update for taus and interactions based on SymmetricInteractions class.
- * Model: X_ijk | mu,a_j,b_k ,I_jk,theta_jk,tau  ~ N(mu + z_j + z_k + I_jk * theta_jk , τ^−1 )
- * Using gamma priors for taua, taub, tauTheta, Bermouli for the variable selection indicator I_jk and Normal for the main effects z and the effect size theta_jk
+ * Model: X_ijk | mu,a_j,b_k ,tauHS, lambda_jk, gamma_jk,tau  ~ N(mu + z_j + z_k + gamma_jk , τ^−1 )
+ * Using gamma priors for taua and taub, Cauchy(0,1)+ for tauHS and lambda_jk
  * Symmetric main effects: zs come from the same distribution
- * Symmetric Interactions: I_jk * theta_jk = I_kj * theta_kj
+ * Symmetric Interactions: gamma_jk = gamma_kj
  **/
 
 class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
-
+  override var iterationCount = 0
   override def variableSelection(info: InitialInfo) = {
     // Initialise case class objects
     val initmt = DenseVector[Double](0.0, 1.0)
@@ -22,11 +23,13 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
     val initAlphaCoefs = DenseVector.zeros[Double](info.alphaLevels)
     val initBetaCoefs = DenseVector.zeros[Double](info.betaLevels)
     val initZetaCoefs = DenseVector.zeros[Double](info.zetaLevels)
-    val initThetas = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
-    val initIndics = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
-    val initFinals = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
+    val initGammas = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels) //Thetas represent the interaction coefficients gamma for this case
+    val initLambdas = DenseMatrix.ones[Double](info.zetaLevels, info.zetaLevels)
+    val initTauHS = 1.0
+    val initAcceptanceCount = 0.0
+    val initTuningPar = 0.0
 
-    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initThetas, initIndics, initFinals, initmt, inittaus)
+    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, initAcceptanceCount, initTuningPar, initAcceptanceCount, initTuningPar)
     calculateAllStates(info.noOfIter, info, fullStateInit)
   }
 
