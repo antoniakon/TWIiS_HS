@@ -158,7 +158,7 @@ class HorseshoeSymmetricInters extends HorseshoeAsymmetricBoth {
         val tauHSSQR = scala.math.pow(curTauHS, 2)
 
         //2. Find the acceptance ratio A. Using the log is better and less prone to errors.
-        val A = log(oldLambdaSQR + 1) + log(oldLambda) - log(lambdaStarSQR) - log(lambdaStar) + (scala.math.pow(curGamma, 2)/(2.0 * tauHSSQR)) * ((1/oldLambdaSQR) - (1/lambdaStarSQR))
+        val A = log(oldLambdaSQR + 1) + log(oldLambda) - log(lambdaStarSQR + 1) - log(lambdaStar) + (scala.math.pow(curGamma, 2)/(2.0 * tauHSSQR)) * ((1/oldLambdaSQR) - (1/lambdaStarSQR))
 
         //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
         val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
