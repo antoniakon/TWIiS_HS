@@ -15,7 +15,7 @@ import scala.math.{log}
  **/
 
 class HorseshoeSymmetricInters extends HorseshoeAsymmetricBoth {
-  override var iterationCount = 0
+  private var iterationCount = 0
   override def variableSelection(info: InitialInfo) = {
     // Initialise case class objects
     val initmt = DenseVector[Double](0.0, 1.0)

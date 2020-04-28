@@ -18,7 +18,7 @@ import scala.math.{log}
  * Asymmetric Interactions: theta_jk is different from theta_kj
  **/
 class HorseshoeAsymmetricBoth extends VariableSelection {
-  var iterationCount = 0
+  private var iterationCount = 0
   override def variableSelection(info: InitialInfo) = {
     // Initialise case class objects
     val initmt = DenseVector[Double](0.0, 1.0)

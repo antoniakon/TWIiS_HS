@@ -15,7 +15,7 @@ import structure.DVStructure
  * Asymmetric Interactions: I_jk * theta_jk != I_kj * theta_kj
  **/
 class HorseshoeSymmetricMain extends VariableSelection {
-  var iterationCount = 0
+  private var iterationCount = 0
   override def variableSelection(info: InitialInfo) = {
     // Initialise case class objects
     val initmt = DenseVector[Double](0.0,1.0)
