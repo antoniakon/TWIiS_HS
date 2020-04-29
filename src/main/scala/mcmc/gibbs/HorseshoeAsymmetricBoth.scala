@@ -175,13 +175,17 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
 //    println(s"stepSizeLambda", stepSizeLambda)
 
     // 1. Use the proposal N(prevTauHS, stepSize) to propose a new location tauHS* (if value sampled <0 propose again until >0)
-    val tauHSStar = breeze.stats.distributions.Gaussian(oldTauHS, stepSizeTauHS).draw()
+    //val tauHSStar = breeze.stats.distributions.Gaussian(oldTauHS, stepSizeTauHS).draw()
+    val tauHSStar = oldTauHS * exp(breeze.stats.distributions.Gaussian(0, stepSizeTauHS).draw()) //This will always sample positive values. Based on test in R this is symmetric, so not necessary to add the fraction for asymmetry in acceptance ratio
+    // OR
+    // val tauHSStar = exp(breeze.stats.distributions.Gaussian(log(oldTauHS), stepSizeTauHS).draw())
 
-    // Reject tauHSStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
-    if(tauHSStar < 0){
-      curTauHS = oldTauHS
-    }
-    else {
+
+    //    // Reject tauHSStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
+    //    if(tauHSStar < 0){
+    //      curTauHS = oldTauHS
+    //    }
+    //    else {
       val oldTauHSSQR = scala.math.pow(oldTauHS, 2)
       val tauHSStarSQR = scala.math.pow(tauHSStar, 2)
 
@@ -216,7 +220,7 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
       } else{
         curTauHS = oldTauHS
       }
-    }
+    //    }
 
     info.structure.foreach(item => {
       // Update lambda_jk
