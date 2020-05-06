@@ -26,10 +26,12 @@ class HorseshoeSymmetricMain extends VariableSelection {
     val initGammas = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels) //zetaLevels in SymmetricMain implementation
     val initLambdas = DenseMatrix.ones[Double](info.zetaLevels, info.zetaLevels) //zetaLevels in SymmetricMain implementation
     val initTauHS = 1.0
-    val initAcceptanceCount = 0.0
-    val initTuningPar = 0.0
+    val initAcceptanceCountLambda = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
+    val initTuningParLambda = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
+    val initAcceptanceCountTau = 0.0
+    val initTuningParTau = 0.0
 
-    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, initAcceptanceCount, initTuningPar, initAcceptanceCount, initTuningPar)
+    val fullStateInit = FullState(initAlphaCoefs, initBetaCoefs, initZetaCoefs, initGammas, initLambdas, initTauHS, initmt, inittaus, initAcceptanceCountLambda, initTuningParLambda, initAcceptanceCountTau, initTuningParTau)
     calculateAllStates(info.noOfIter, info, fullStateInit)
   }
 
@@ -99,7 +101,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
   override def nextIndicsInters(oldfullState: FullState, info: InitialInfo, inBurnIn: Boolean):FullState= {
     val curGammaEstim = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
     val curLambdaEstim = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
-    var lsiLambda = 0.0
+    var lsiLambda = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
     var lsiTauHS = 0.0
     var curTauHS = 0.0
     val njk = info.structure.sizeOfStructure() //no of interactions
@@ -115,6 +117,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
     //val stepSizeTauHS = 0.014
     //val stepSizeLambda = 2.5 //sigma
 
+    val oldLambdaTuningParams = oldfullState.lambdaTuningPar
     // Automatic adaptation of the tuning parameters based on paper: http://probability.ca/jeff/ftpdir/adaptex.pdf
     val (stepSizeTauHS, stepSizeLambda) = if (inBurnIn){
       if(iterationCount % batchSize == 0){
@@ -122,31 +125,40 @@ class HorseshoeSymmetricMain extends VariableSelection {
         val deltan = scala.math.min(0.01, 1/sqrt(n))
 
         val accFracHS = acceptedCountTauHS / batchSize
-        val accFracLambda = acceptedCountLambda / (batchSize * njk)
+        val accFracLambda = acceptedCountLambda.map(x=> x / batchSize) // ratio of accepted for each lambda as it is DenseMatrix
 
         acceptedCountTauHS = 0
-        acceptedCountLambda = 0
+        acceptedCountLambda = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels) //Reset all counts to 0 since batch is completed
+
+        def checkRatioAndNewDiff(ratio: Double, deltan: Double): Double = {
+          if (ratio > 0.44){
+            deltan
+          }else{
+            deltan * (-1)
+          }
+        }
 
         if(accFracHS > 0.44){
           lsiTauHS = oldfullState.tauHSTuningPar + deltan
         }else{
           lsiTauHS = oldfullState.tauHSTuningPar - deltan
         }
-        if(accFracLambda > 0.44){
-          lsiLambda = oldfullState.lambdaTuningPar + deltan
-        }else{
-          lsiLambda = oldfullState.lambdaTuningPar - deltan
-        }
-        (exp(lsiTauHS), exp(lsiLambda))
+        lsiLambda = accFracLambda.map(x => checkRatioAndNewDiff(x, deltan)) + oldLambdaTuningParams
+        val newLamExp = lsiLambda.map(i=> exp(i))
+        (exp(lsiTauHS), newLamExp)
       } else{ // if not batch of 50 completed
         lsiTauHS = oldfullState.tauHSTuningPar
-        lsiLambda = oldfullState.lambdaTuningPar
-        (exp(lsiTauHS), exp(lsiLambda))
+        lsiLambda = oldLambdaTuningParams
+        val newLamExp = lsiLambda.map(i=> exp(i))
+        // TODO: this breeze.numerics.exp.inPlace(lsiLambda) might give incorrect results bcs it's mutable
+        (exp(lsiTauHS), newLamExp)
       }
     }else{ // if not in burn-in
       lsiTauHS = oldfullState.tauHSTuningPar
-      lsiLambda = oldfullState.lambdaTuningPar
-      (exp(lsiTauHS), exp(lsiLambda))
+      lsiLambda = oldLambdaTuningParams
+      val newLamExp = lsiLambda.map(i=> exp(i))
+      // TODO: this breeze.numerics.exp.inPlace(lsiLambda) might give incorrect results bcs it's mutable
+      (exp(lsiTauHS), newLamExp)
     }
 
     //    println(s"stepSizeTauHS", stepSizeTauHS)
@@ -202,7 +214,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
       val oldLambda = oldfullState.lambdas(item.a, item.b)
       val curGamma = oldfullState.gammaCoefs(item.a, item.b)
 
-      val lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSizeLambda).draw()
+      val lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSizeLambda(item.a, item.b)).draw()
 
       // Reject lambdaStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
       if(lambdaStar < 0){
@@ -222,7 +234,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
         if(A > u){
           curLambdaEstim(item.a, item.b) = lambdaStar
           if(inBurnIn){
-            acceptedCountLambda += 1
+            acceptedCountLambda(item.a, item.b) += 1
           }
         } else{
           curLambdaEstim(item.a, item.b) = oldLambda
@@ -298,9 +310,9 @@ class HorseshoeSymmetricMain extends VariableSelection {
 
   override def getInputFilePath(): String = getFilesDirectory.concat("/simulInterSymmetricMain.csv")
 
-  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/ScalaRuntime10mSymmetricMainHorseshoe.txt")
+  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/ScalaRuntime10mSymmetricMainHorseshoeSepLambdas.txt")
 
-  override def getOutputFilePath(): String = getFilesDirectory.concat("/symmetricMainScalaResHorseshoe.csv")
+  override def getOutputFilePath(): String = getFilesDirectory.concat("/symmetricMainScalaResHorseshoeSepLambdas.csv")
 
   override def printTitlesToFile(info: InitialInfo): Unit = {
     val pw = new PrintWriter(new File(getOutputFilePath()))
