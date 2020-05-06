@@ -120,17 +120,17 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
        * Function for estimating the sqr of two matrices, do elementwise division if the denominator is not 0 and calculate the sum
        */
       def elementwiseDivisionSQRSum(a: DenseMatrix[Double], b: DenseMatrix[Double]): Double = {
-        var sum = 0.0
+        val divMat = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
         val aSQR = a.map(x => scala.math.pow(x, 2))
         val bSQR = b.map(x => scala.math.pow(x, 2))
         for (i <- 0 until info.zetaLevels){
           for (j <- 0 until info.zetaLevels){
             if(bSQR(i,j) != 0){
-              sum += aSQR(i,j) / bSQR(i,j)
+              divMat(i,j) = aSQR(i,j) / bSQR(i,j)
             }
           }
         }
-        sum
+        breeze.linalg.sum(upperTriangular(divMat))
       }
 
       //2. Find the acceptance ratio A. Using the log is better and less prone to errors due to overflows.
@@ -211,7 +211,7 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
       val meanPInter = (info.gammaPriorMean * tauGammajk + oldfullState.mt(1) * SigmaTheta) * varPInter
       curGammaEstim(item.a, item.b) = breeze.stats.distributions.Gaussian(meanPInter, sqrt(varPInter)).draw()
       curGammaEstim(item.b, item.a) = curGammaEstim(item.a, item.b)
-
+      curLambdaEstim(item.b, item.a) = curLambdaEstim(item.a, item.b)
     })
     oldfullState.copy(gammaCoefs = curGammaEstim, lambdas = curLambdaEstim, tauHS = curTauHS, lambdaCount = acceptedCountLambda, lambdaTuningPar = lsiLambda, tauHSCount = acceptedCountTauHS, tauHSTuningPar = lsiTauHS)
   }
