@@ -165,7 +165,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
     //    println(s"stepSizeLambda", stepSizeLambda)
 
     // 1. Use the proposal N(prevTauHS, stepSize) to propose a new location tauHS* (if value sampled <0 propose again until >0)
-    val tauHSStar = breeze.stats.distributions.Gaussian(oldTauHS, stepSizeTauHS).draw()
+    val tauHSStar = breeze.stats.distributions.LogNormal(log(oldTauHS), stepSizeTauHS).draw()
 
     // Reject tauHSStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
     if(tauHSStar < 0){
@@ -193,7 +193,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
       }
 
       //2. Find the acceptance ratio A. Using the log is better and less prone to errors due to overflows.
-      val A = log(oldTauHSSQR + 1) + njk * log(oldTauHS) - log(tauHSStarSQR + 1) - njk * log(tauHSStar) + 0.5 * elementwiseDivisionSQRSum(oldfullState.gammaCoefs, oldfullState.lambdas) * ((1/oldTauHSSQR) - (1/tauHSStarSQR))
+      val A = log(oldTauHSSQR + 1) + njk * log(oldTauHS) - log(tauHSStarSQR + 1) - njk * log(tauHSStar) + 0.5 * elementwiseDivisionSQRSum(oldfullState.gammaCoefs, oldfullState.lambdas) * ((1/oldTauHSSQR) - (1/tauHSStarSQR)) + log(tauHSStar) - log(oldTauHS)
 
       //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
       val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
@@ -214,7 +214,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
       val oldLambda = oldfullState.lambdas(item.a, item.b)
       val curGamma = oldfullState.gammaCoefs(item.a, item.b)
 
-      val lambdaStar = breeze.stats.distributions.Gaussian(oldLambda, stepSizeLambda(item.a, item.b)).draw()
+      val lambdaStar = breeze.stats.distributions.LogNormal(log(oldLambda), stepSizeLambda(item.a, item.b)).draw()
 
       // Reject lambdaStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
       if(lambdaStar < 0){
@@ -226,7 +226,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
         val tauHSSQR = scala.math.pow(curTauHS, 2)
 
         //2. Find the acceptance ratio A. Using the log is better and less prone to errors.
-        val A = log(oldLambdaSQR + 1) + log(oldLambda) - log(lambdaStarSQR + 1) - log(lambdaStar) + (scala.math.pow(curGamma, 2)/(2.0 * tauHSSQR)) * ((1/oldLambdaSQR) - (1/lambdaStarSQR))
+        val A = log(oldLambdaSQR + 1) + log(oldLambda) - log(lambdaStarSQR + 1) - log(lambdaStar) + (scala.math.pow(curGamma, 2)/(2.0 * tauHSSQR)) * ((1/oldLambdaSQR) - (1/lambdaStarSQR)) + log(lambdaStar) - log(oldLambda)
 
         //3. Compare A with a random number from uniform, then accept/reject and store to curLambdaEstim accordingly
         val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
@@ -310,9 +310,9 @@ class HorseshoeSymmetricMain extends VariableSelection {
 
   override def getInputFilePath(): String = getFilesDirectory.concat("/simulInterSymmetricMain.csv")
 
-  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/ScalaRuntime10mSymmetricMainHorseshoeSepLambdas.txt")
+  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/Horseshoe/ScalaRuntime1mSymmetricMainHorseshoeSepLambdasLOG.txt")
 
-  override def getOutputFilePath(): String = getFilesDirectory.concat("/symmetricMainScalaResHorseshoeSepLambdas.csv")
+  override def getOutputFilePath(): String = getFilesDirectory.concat("/Horseshoe/symmetricMain1mScalaResHorseshoeSepLambdasLOG.csv")
 
   override def printTitlesToFile(info: InitialInfo): Unit = {
     val pw = new PrintWriter(new File(getOutputFilePath()))
