@@ -51,15 +51,16 @@ class DVStructureIndexedMapMemo(y: DenseVector[Double], alpha: DenseVector[Int],
         case Some(value) => // do nothing
       }
 
-      alphaIndices = alphaIndices.map{case (k,v) => (k, v.distinct)}
-      betaIndices = betaIndices.map{case (k,v) => (k, v.distinct)}
-      zetaIndices = zetaIndices.map{case (k,v) => (k, v.distinct)}
-      zetaIndicesWithoutDoubles = zetaIndices.map{case (k,v) => (k, v.filter(a => a._1!=a._2))}
-      zetaIndicesDoubles = zetaIndices.map{case (k,v) => (k, v.filter(a => a._1==a._2))}.filter(v1 => v1._2.nonEmpty) //Includes only the double z without the zs that do not have doubles
       myStructure((curAlpha, curBeta)).addItem(y(i))
     }
 
+    alphaIndices = alphaIndices.map{case (k,v) => (k, v.distinct)}
+    betaIndices = betaIndices.map{case (k,v) => (k, v.distinct)}
+    zetaIndices = zetaIndices.map{case (k,v) => (k, v.distinct)}
+    zetaIndicesWithoutDoubles = zetaIndices.map{case (k,v) => (k, v.filter(a => a._1!=a._2))}
+    zetaIndicesDoubles = zetaIndices.map{case (k,v) => (k, v.filter(a => a._1==a._2))}.filter(v1 => v1._2.nonEmpty) //Includes only the double z without the zs that do not have doubles
   }
+
   private val memoizedCalcAlphaSum: Int => Double = Memo.immutableHashMapMemo {
     num => alphaIndices(num).map(tuple => myStructure(tuple).sum).sum
   }
