@@ -25,6 +25,10 @@ class DVList {
     list.map(f)
   }
 
+  def foldLeft(z: Double)(op: (Double, Double) => Double): Double={
+    list.foldLeft(z)(op)
+  }
+
   override def toString = {
     list.toString
   }

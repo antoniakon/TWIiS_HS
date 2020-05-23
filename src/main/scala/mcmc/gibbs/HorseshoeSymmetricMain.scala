@@ -301,7 +301,7 @@ class HorseshoeSymmetricMain extends VariableSelection {
     structure.foreach( item => {
       val a = item.a
       val b = item.b
-      sum += item.list.map(x => scala.math.pow(x - mu - zetaEff(a) - zetaEff(b) - interEff(a, b), 2)).sum
+      sum += item.list.foldLeft(0.0)((sum, x) => sum + scala.math.pow(x - mu - zetaEff(a) - zetaEff(b) - interEff(a, b), 2))
     })
     sum
   }

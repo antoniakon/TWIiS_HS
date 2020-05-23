@@ -358,18 +358,18 @@ class HorseshoeAsymmetricBoth extends VariableSelection {
     structure.foreach(item => {
       val a = item.a
       val b = item.b
-      sum += item.list.map(x => scala.math.pow(x - mu - alphaEff(a) - betaEff(b) - interEff(a, b) , 2)).sum
+      sum += item.list.foldLeft(0.0)((sum, x) => sum + scala.math.pow(x - mu - alphaEff(a) - betaEff(b) - interEff(a, b) , 2))
     })
     sum
   }
 
   override def getFilesDirectory(): String = "/home/antonia/ResultsFromCloud/Report/symmetricNov/asymmetricBoth"
 
-  override def getInputFilePath(): String = getFilesDirectory.concat("/simulInterAsymmetricBoth.csv")
+  override def getInputFilePath(): String = getFilesDirectory.concat("/simulNoInterAsymmetricBoth113x143-10kobs.csv")
 
-  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/Horseshoe/1m/ScalaRuntimeHorseshoe1mFullResUsingSeparateLambdasLOG.txt")
+  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/Horseshoe/1m/try.txt")
 
-  override def getOutputFilePath(): String = getFilesDirectory.concat("/Horseshoe/1m/ScalaAsymBothHorseshoe1mFullResUsingSeparateLambdasLOG.csv")
+  override def getOutputFilePath(): String = getFilesDirectory.concat("/Horseshoe/1m/try.csv")
 
   override def printTitlesToFile(info: InitialInfo): Unit = {
     val pw = new PrintWriter(new File(getOutputFilePath))
