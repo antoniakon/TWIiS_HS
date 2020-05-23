@@ -264,7 +264,11 @@ class HorseshoeSymmetricMain extends VariableSelection {
       if(k1!=zetaIndex) k1
       else k2
     }
-    structure.getAllOtherZetasItemsForGivenZ(zetaIndex).map(elem => elem._2.length * zetaEff(notZeta(elem._1._1, elem._1._2))).reduce(_+_)
+    var totalsum = 0.0
+    structure.getAllOtherZetasItemsForGivenZ(zetaIndex).foreach(item => {
+      totalsum += item._2.length * zetaEff(notZeta(item._1._1, item._1._2))
+    })
+    totalsum
   }
 
   /**
@@ -282,14 +286,18 @@ class HorseshoeSymmetricMain extends VariableSelection {
    * Add all the interaction effects for a given zeta. Adds all the interactions for which zeta is on either side. Includes the doubles bcs getZetasItemsForGivenZ uses a structure that includes everything
    */
   def sumInterEffGivenZeta(structure: DVStructure, zetaIndex: Int, interEff: DenseMatrix[Double]): Double = {
-    structure.getAllOtherZetasItemsForGivenZ(zetaIndex).map(elem => elem._2.length * interEff(elem._1._1, elem._1._2)).reduce(_+_)
+    var totalsum = 0.0
+    structure.getAllOtherZetasItemsForGivenZ(zetaIndex).foreach(item => {
+      totalsum += item._2.length * interEff(item._1._1, item._1._2)
+    })
+    totalsum
   }
 
   /**
    * Add all the interaction effects for a given zeta which is double (zeta,zeta)
    */
   def sumInterEffDoublesGivenZeta(structure: DVStructure, zetaIndex: Int, interEff: DenseMatrix[Double]): Double = {
-    structure.getAllDoubleZetasItemsForGivenZ(zetaIndex).map(elem => elem._2.length * interEff(elem._1._1, elem._1._2)).reduce(_+_)
+    structure.getAllDoubleZetasItemsForGivenZ(zetaIndex).foldLeft(0.0)( (sum, elem) => sum + elem._2.length * interEff(elem._1._1, elem._1._2))
   }
 
   /**
