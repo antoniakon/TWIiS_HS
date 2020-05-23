@@ -42,9 +42,6 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
 
     val curGammaEstim = (DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels))
     val curLambdaEstim = (DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels))
-    var lsiLambda = DenseMatrix.zeros[Double](info.zetaLevels, info.zetaLevels)
-    var lsiTauHS = 0.0
-    var curTauHS = 0.0
     val njk = info.noOfInters //no of interactions
     val batchSize = 50 //batch size for automatic tuning
 
@@ -60,7 +57,7 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
 
     val oldLambdaTuningParams = oldfullState.lambdaTuningPar
     // Automatic adaptation of the tuning parameters based on paper: http://probability.ca/jeff/ftpdir/adaptex.pdf
-    val (stepSizeTauHS, stepSizeLambda) = if (inBurnIn){
+    val (stepSizeTauHS, stepSizeLambda, lsiLambda, lsiTauHS) = if (inBurnIn){
       if(iterationCount % batchSize == 0){
         val n = iterationCount / batchSize
         val deltan = scala.math.min(0.01, 1/sqrt(n))
@@ -79,27 +76,27 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
           }
         }
 
-        if(accFracHS > 0.44){
-          lsiTauHS = oldfullState.tauHSTuningPar + deltan
+        val lsiTauHS = if(accFracHS > 0.44){
+          oldfullState.tauHSTuningPar + deltan
         }else{
-          lsiTauHS = oldfullState.tauHSTuningPar - deltan
+          oldfullState.tauHSTuningPar - deltan
         }
-        lsiLambda = accFracLambda.map(x => checkRatioAndNewDiff(x, deltan)) + oldLambdaTuningParams
+        val lsiLambda = accFracLambda.map(x => checkRatioAndNewDiff(x, deltan)) + oldLambdaTuningParams
         val newLamExp = lsiLambda.map(i=> exp(i))
-        (exp(lsiTauHS), newLamExp)
+        (exp(lsiTauHS), newLamExp, lsiLambda, lsiTauHS)
       } else{ // if not batch of 50 completed
-        lsiTauHS = oldfullState.tauHSTuningPar
-        lsiLambda = oldLambdaTuningParams
+        val lsiTauHS = oldfullState.tauHSTuningPar
+        val lsiLambda = oldLambdaTuningParams
         val newLamExp = lsiLambda.map(i=> exp(i))
         // TODO: this breeze.numerics.exp.inPlace(lsiLambda) might give incorrect results bcs it's mutable
-        (exp(lsiTauHS), newLamExp)
+        (exp(lsiTauHS), newLamExp, lsiLambda, lsiTauHS)
       }
     }else{ // if not in burn-in
-      lsiTauHS = oldfullState.tauHSTuningPar
-      lsiLambda = oldLambdaTuningParams
+      val lsiTauHS = oldfullState.tauHSTuningPar
+      val lsiLambda = oldLambdaTuningParams
       val newLamExp = lsiLambda.map(i=> exp(i))
       // TODO: this breeze.numerics.exp.inPlace(lsiLambda) might give incorrect results bcs it's mutable
-      (exp(lsiTauHS), newLamExp)
+      (exp(lsiTauHS), newLamExp, lsiLambda, lsiTauHS)
     }
 
     //    println(s"stepSizeTauHS", stepSizeTauHS)
@@ -109,8 +106,8 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
     val tauHSStar = breeze.stats.distributions.LogNormal(log(oldTauHS), stepSizeTauHS).draw()
 
     // Reject tauHSStar if it is < 0. Based on: https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/
-    if(tauHSStar < 0){
-      curTauHS = oldTauHS
+    val curTauHS = if(tauHSStar < 0){
+       oldTauHS
     }
     else {
       val oldTauHSSQR = scala.math.pow(oldTauHS, 2)
@@ -140,12 +137,12 @@ class HorseshoeSymmetricBoth extends HorseshoeSymmetricMain {
       val u = log(breeze.stats.distributions.Uniform(0, 1).draw())
 
       if(A > u){
-        curTauHS = tauHSStar
         if(inBurnIn){
           acceptedCountTauHS += 1
         }
+        tauHSStar //Return value to curTauHS
       } else{
-        curTauHS = oldTauHS
+        oldTauHS //Return value to curTauHS
       }
     }
 
