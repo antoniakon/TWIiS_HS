@@ -10,7 +10,8 @@ object MainRunner {
     val varSelectionObject = getVariableSelectionVariant()
 
     //stop execution until press enter
-    readLine()
+    //readLine()
+    println("Running")
 
     // Read the data
     val data = csvread(new File(varSelectionObject.getInputFilePath()))
@@ -63,18 +64,18 @@ object MainRunner {
     val a = 1
     val b = 0.0001
     val interPriorMean = 0.0 //common mean for all the interaction effects
-    val p = 0.2
-    val burnIn = 30000
+    val burnIn = 300000
 
     val initialInfo = InitialInfo(noOfIters, thin, burnIn, sampleSize, sumObs, structure, structureSorted, alphaLevels, betaLevels, zetaLevels, noOfInters, sizeofDouble, alphaLevelsDist, betaLevelsDist, zetaLevelsDist, noOftriangular,
       alphaPriorMean, betaPriorMean, interPriorMean, mu0, tau0,
-      a, b, aPrior, bPrior, p)
+      a, b, aPrior, bPrior)
 
     varSelectionObject.time(
       varSelectionObject.variableSelection(initialInfo)
     )
   }
 
+  //Choose the object you want to run
   private def getVariableSelectionVariant() : VariableSelection = {
     object myHorseshoeAsymmetricBoth extends HorseshoeAsymmetricBoth
     object myHorseshoeSymmetricInters extends HorseshoeSymmetricInters

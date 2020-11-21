@@ -66,7 +66,7 @@ abstract class VariableSelection {
     //println(fstate.acoefs)
     if (n==0) fstateList
     else{
-      println(n)
+      //println(n)
       val latestFullyUpdatedState: FullState = calculateNextState(info, fstate, inBurnIn)
       if((n % info.thin).equals(0)) {
         calculateNewState(n-1, info, latestFullyUpdatedState, FullStateList(fstateList.fstateL :+ latestFullyUpdatedState), inBurnIn)

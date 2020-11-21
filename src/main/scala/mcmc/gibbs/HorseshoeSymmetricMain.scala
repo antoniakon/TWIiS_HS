@@ -311,13 +311,13 @@ class HorseshoeSymmetricMain extends VariableSelection {
     sum
   }
 
-  override def getFilesDirectory(): String = "/home/antonia/ResultsFromCloud/Report/symmetricNov/symmetricMain"
+  override def getFilesDirectory(): String = "./data/15x20"
 
   override def getInputFilePath(): String = getFilesDirectory.concat("/simulInterSymmetricMain.csv")
 
-  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/Horseshoe/ScalaRuntime1mSymmetricMainHorseshoeSepLambdasLOG.txt")
+  override def getOutputRuntimeFilePath(): String = getFilesDirectory().concat("/ScalaSymMainHorseshoe10x15Runtime.txt")
 
-  override def getOutputFilePath(): String = getFilesDirectory.concat("/Horseshoe/symmetricMain1mScalaResHorseshoeSepLambdasLOG.csv")
+  override def getOutputFilePath(): String = getFilesDirectory.concat("/ScalaSymMainHorseshoe10x15Results.csv")
 
   override def printTitlesToFile(info: InitialInfo): Unit = {
     val pw = new PrintWriter(new File(getOutputFilePath()))
